@@ -40,7 +40,7 @@ type StrokeInput struct {
 
 // Op is one entry of a batch. Add carries Stroke; Delete and Restore carry ID.
 type Op struct {
-	Op     string       `json:"op" binding:"required,oneof=add delete restore"`
+	Op     string       `json:"op" binding:"required,oneof=add delete restore" tstype:"'add' | 'delete' | 'restore'"`
 	Stroke *StrokeInput `json:"stroke,omitempty"`
 	ID     string       `json:"id,omitempty" binding:"omitempty,uuid"`
 }
