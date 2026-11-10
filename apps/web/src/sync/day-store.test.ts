@@ -265,4 +265,26 @@ describe("DayStore", () => {
       expect(store.pendingCount()).toBe(1);
     });
   });
+
+  describe("protectedIds", () => {
+    it("names Strokes with a Pending op or an undo step until the history clears, never settled ones", () => {
+      const store = new DayStore();
+      store.setConfirmed(DAY, [confirmed("old", 1)]);
+      store.commitStroke(stroke("a"));
+      store.commitStroke(stroke("b"));
+      expect([...store.protectedIds(DAY)].sort()).toEqual(["a", "b"]);
+      store.settle(
+        store.takeUnsent(),
+        [
+          { id: "a", seq: 2 },
+          { id: "b", seq: 3 },
+        ],
+        10,
+      );
+      expect([...store.protectedIds(DAY)].sort()).toEqual(["a", "b"]);
+      store.clearHistory(DAY);
+      expect(store.protectedIds(DAY).size).toBe(0);
+      expect(store.confirmedStrokes(DAY).map((s) => s.id)).toEqual(["old", "a", "b"]);
+    });
+  });
 });

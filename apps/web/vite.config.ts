@@ -12,6 +12,10 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  test: {
+    include: ["src/**/*.test.ts"],
+    exclude: ["src/**/*.browser.test.ts"],
+  },
   plugins: [
     tailwindcss(),
     tanstackRouter({

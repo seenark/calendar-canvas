@@ -53,6 +53,7 @@ Other commands:
 
 - `bun run check` runs Vite+ format and lint checks and the TypeScript checks.
 - `cd apps/server && go test ./...` runs the server tests.
+- `bun run test:browser` runs the Pruning tests in headless Chromium. Install the browser once with `cd apps/web && bunx playwright install chromium`. `vp test run` skips these tests.
 - `bun run gen:types` regenerates the TypeScript types from the Go API types.
 
 Layout: `apps/web` (SPA), `apps/server` (Go/Gin server), `packages/ui` (shared shadcn/ui components), `docs/adr` (decisions), `GLOSSARY.md` (domain terms).

@@ -10,6 +10,7 @@ import { Toolbar } from "@/drawing/toolbar/toolbar";
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, monthOfDay, parseDay } from "@/lib/date";
 import { dayLayoutId, isDayCellOnScreen } from "@/month/day-cell";
+import { usePruning } from "@/pruning/trigger";
 import { toolAtom } from "@/state/tool";
 import { dayStore } from "@/sync/day-store";
 import { useMonths } from "@/sync/queries";
@@ -33,6 +34,7 @@ export function DrawingPage({ date }: { date: string }) {
   const paperRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const [paperWidth, setPaperWidth] = useState(0);
+  usePruning(date, surfaceRef);
   const [shared] = useState(() => !reducedMotion && isDayCellOnScreen(date));
   const [ready, setReady] = useState(!shared);
   const [drawn, setDrawn] = useState(false);
