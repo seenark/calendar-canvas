@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"github.com/seenark/calendar-canvas/apps/server/internal/passhash"
 )
 
 func env(overrides map[string]string) func(string) string {
@@ -89,5 +91,36 @@ func TestAllowlist(t *testing.T) {
 	}
 	if !cfg.AllowedEmails.Allows("anyone@anywhere.dev") {
 		t.Error("* must allow every account")
+	}
+}
+
+func TestAdminIsEnabledOnlyWithUsernameAndHash(t *testing.T) {
+	phc, err := passhash.Generate("pw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, tc := range map[string]struct {
+		username, hash string
+		want           bool
+	}{
+		"both":        {"admin", phc, true},
+		"no username": {"", phc, false},
+		"no hash":     {"admin", "", false},
+		"neither":     {"", "", false},
+	} {
+		cfg, err := parse(env(map[string]string{"ADMIN_USERNAME": tc.username, "ADMIN_PASSWORD_HASH": tc.hash}))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if cfg.AdminEnabled() != tc.want {
+			t.Errorf("%s: AdminEnabled = %v, want %v", name, cfg.AdminEnabled(), tc.want)
+		}
+	}
+}
+
+func TestParseRejectsMalformedAdminHash(t *testing.T) {
+	_, err := parse(env(map[string]string{"ADMIN_USERNAME": "admin", "ADMIN_PASSWORD_HASH": "hunter2"}))
+	if err == nil || !strings.Contains(err.Error(), "ADMIN_PASSWORD_HASH") {
+		t.Errorf("err = %v, want ADMIN_PASSWORD_HASH error", err)
 	}
 }

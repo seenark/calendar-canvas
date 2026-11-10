@@ -1,19 +1,14 @@
 import { createFileRoute, Outlet, redirect, useParams } from "@tanstack/react-router";
 
-import { ApiError, meQuery } from "@/lib/api";
+import { fetchMe } from "@/lib/api";
 import { isYearMonth, monthOfDay, toDayKey } from "@/lib/date";
 import { MonthView } from "@/month/month-view";
 
 export const Route = createFileRoute("/_calendar")({
   beforeLoad: async ({ context, location }) => {
-    try {
-      await context.queryClient.ensureQueryData(meQuery);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        throw redirect({ to: "/login", search: { return: location.href } });
-      }
-      throw err;
-    }
+    const me = await fetchMe(context.queryClient);
+    if (!me) throw redirect({ to: "/login", search: { return: location.href } });
+    if (me.role !== "user") throw redirect({ to: "/admin" });
   },
   component: CalendarLayout,
 });

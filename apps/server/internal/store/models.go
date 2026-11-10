@@ -5,11 +5,12 @@
 package store
 
 type Session struct {
-	TokenHash []byte
-	UserID    *string
-	Role      string
-	CreatedAt int64
-	ExpiresAt int64
+	TokenHash        []byte
+	UserID           *string
+	Role             string
+	CreatedAt        int64
+	ExpiresAt        int64
+	AdminFingerprint *string
 }
 
 type Stroke struct {

@@ -50,6 +50,38 @@ func (q *Queries) AddStroke(ctx context.Context, arg AddStrokeParams) error {
 	return err
 }
 
+const countStrokesByUser = `-- name: CountStrokesByUser :many
+SELECT user_id, COUNT(*) AS stroke_count FROM strokes WHERE deleted_at IS NULL GROUP BY user_id
+`
+
+type CountStrokesByUserRow struct {
+	UserID      string
+	StrokeCount int64
+}
+
+func (q *Queries) CountStrokesByUser(ctx context.Context) ([]CountStrokesByUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, countStrokesByUser)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountStrokesByUserRow
+	for rows.Next() {
+		var i CountStrokesByUserRow
+		if err := rows.Scan(&i.UserID, &i.StrokeCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteStroke = `-- name: DeleteStroke :exec
 UPDATE strokes SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL
 `

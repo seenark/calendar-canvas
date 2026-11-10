@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +21,7 @@ import (
 	"github.com/seenark/calendar-canvas/apps/server/internal/api"
 	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
 	"github.com/seenark/calendar-canvas/apps/server/internal/config"
+	"github.com/seenark/calendar-canvas/apps/server/internal/passhash"
 	"github.com/seenark/calendar-canvas/apps/server/internal/purge"
 	"github.com/seenark/calendar-canvas/apps/server/internal/static"
 	"github.com/seenark/calendar-canvas/apps/server/internal/store"
@@ -35,6 +39,12 @@ func main() {
 		switch os.Args[1] {
 		case "healthcheck":
 			if err := healthcheck(config.Port()); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				os.Exit(1)
+			}
+			return
+		case "hash-password":
+			if err := hashPassword(os.Stdin, os.Stdout); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -68,7 +78,8 @@ func serve(cfg config.Config) error {
 	}
 	defer conn.Close()
 
-	svc, err := auth.New(ctx, cfg, googleIssuer, googleEndpoint, store.New(conn))
+	q := store.New(conn)
+	svc, err := auth.New(ctx, cfg, googleIssuer, googleEndpoint, q)
 	if err != nil {
 		return err
 	}
@@ -79,6 +90,8 @@ func serve(cfg config.Config) error {
 		Addr:              ":" + cfg.Port,
 		Handler:           api.NewRouter(static.FS(), cfg, svc, conn),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	errc := make(chan error, 1)
@@ -97,6 +110,24 @@ func serve(cfg config.Config) error {
 		return err
 	}
 	return nil
+}
+
+// hashPassword reads one line from in and prints its argon2id hash for ADMIN_PASSWORD_HASH.
+func hashPassword(in io.Reader, out io.Writer) error {
+	line, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	password := strings.TrimRight(line, "\r\n")
+	if password == "" {
+		return errors.New("password is empty: pipe it on stdin, e.g. printf '%s' \"$PASSWORD\" | server hash-password")
+	}
+	hash, err := passhash.Generate(password)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(out, hash)
+	return err
 }
 
 func healthcheck(port string) error {

@@ -28,6 +28,7 @@ type env struct {
 	t       *testing.T
 	issuer  *fakeIssuer
 	q       *store.Queries
+	svc     *auth.Service
 	base    string
 	handler http.Handler
 	client  *http.Client
@@ -37,6 +38,12 @@ type env struct {
 // newEnv serves the router on a real listener so the cookie jar and redirects behave like a browser.
 // A non-empty baseURL skips the listener and is only usable through handler.
 func newEnv(t *testing.T, allowed, baseURL string) *env {
+	t.Helper()
+	return newEnvWith(t, allowed, baseURL, nil)
+}
+
+// newEnvWith overrides environment variables after the defaults, which configure the Admin.
+func newEnvWith(t *testing.T, allowed, baseURL string, overrides map[string]string) *env {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -53,7 +60,12 @@ func newEnv(t *testing.T, allowed, baseURL string) *env {
 		"GOOGLE_CLIENT_SECRET": testClientSecret,
 		"SESSION_SECRET":       strings.Repeat("k", 32),
 		"ALLOWED_EMAILS":       allowed,
+		"ADMIN_USERNAME":       adminUsername,
+		"ADMIN_PASSWORD_HASH":  testAdminHash(),
 	} {
+		if o, ok := overrides[k]; ok {
+			v = o
+		}
 		t.Setenv(k, v)
 	}
 	cfg, err := config.Load()
@@ -79,6 +91,7 @@ func newEnv(t *testing.T, allowed, baseURL string) *env {
 		t:       t,
 		issuer:  issuer,
 		q:       q,
+		svc:     svc,
 		base:    cfg.AppBaseURL,
 		handler: NewRouter(testSPA, cfg, svc, conn),
 		client: &http.Client{

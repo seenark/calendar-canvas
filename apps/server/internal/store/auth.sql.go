@@ -10,16 +10,17 @@ import (
 )
 
 const createSession = `-- name: CreateSession :exec
-INSERT INTO sessions (token_hash, user_id, role, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO sessions (token_hash, user_id, role, created_at, expires_at, admin_fingerprint)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreateSessionParams struct {
-	TokenHash []byte
-	UserID    *string
-	Role      string
-	CreatedAt int64
-	ExpiresAt int64
+	TokenHash        []byte
+	UserID           *string
+	Role             string
+	CreatedAt        int64
+	ExpiresAt        int64
+	AdminFingerprint *string
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
@@ -29,7 +30,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 		arg.Role,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.AdminFingerprint,
 	)
+	return err
+}
+
+const deleteAdminSessionsExceptFingerprint = `-- name: DeleteAdminSessionsExceptFingerprint :exec
+DELETE FROM sessions WHERE role = 'admin' AND (admin_fingerprint IS NULL OR admin_fingerprint <> ?)
+`
+
+func (q *Queries) DeleteAdminSessionsExceptFingerprint(ctx context.Context, adminFingerprint *string) error {
+	_, err := q.db.ExecContext(ctx, deleteAdminSessionsExceptFingerprint, adminFingerprint)
 	return err
 }
 
@@ -40,6 +51,18 @@ DELETE FROM sessions WHERE token_hash = ?
 func (q *Queries) DeleteSession(ctx context.Context, tokenHash []byte) error {
 	_, err := q.db.ExecContext(ctx, deleteSession, tokenHash)
 	return err
+}
+
+const deleteUser = `-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = ?
+`
+
+func (q *Queries) DeleteUser(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUser, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const extendSession = `-- name: ExtendSession :exec
@@ -57,7 +80,7 @@ func (q *Queries) ExtendSession(ctx context.Context, arg ExtendSessionParams) er
 }
 
 const getSession = `-- name: GetSession :one
-SELECT token_hash, user_id, role, created_at, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?
+SELECT token_hash, user_id, role, created_at, expires_at, admin_fingerprint FROM sessions WHERE token_hash = ? AND expires_at > ?
 `
 
 type GetSessionParams struct {
@@ -74,6 +97,7 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 		&i.Role,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.AdminFingerprint,
 	)
 	return i, err
 }
@@ -95,6 +119,41 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.LastLoginAt,
 	)
 	return i, err
+}
+
+const listUsers = `-- name: ListUsers :many
+SELECT id, google_sub, email, name, avatar_url, created_at, last_login_at FROM users ORDER BY created_at, id
+`
+
+func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.GoogleSub,
+			&i.Email,
+			&i.Name,
+			&i.AvatarUrl,
+			&i.CreatedAt,
+			&i.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const purgeExpiredSessions = `-- name: PurgeExpiredSessions :execrows
