@@ -49,3 +49,14 @@ export function formatThaiMonth(yearMonth: string): string {
   const date = parseDay(`${yearMonth}-01`)!;
   return `${format(date, "MMMM", { locale: th })} ${date.getFullYear() + 543}`;
 }
+
+/** Months since year 0, so month arithmetic is plain integer arithmetic. */
+export function monthIndex(yearMonth: string): number {
+  const [y, m] = yearMonth.split("-").map(Number) as [number, number];
+  return y * 12 + m - 1;
+}
+
+export function yearMonthOfIndex(index: number): string {
+  const year = Math.floor(index / 12);
+  return `${String(year).padStart(4, "0")}-${String((index % 12) + 1).padStart(2, "0")}`;
+}
