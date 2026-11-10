@@ -45,6 +45,8 @@ export class DrawingEngine {
   private strokes: Stroke[] = [];
   private readonly paths = new Map<string, Path2D>();
   private active: Active | null = null;
+  private ending: { a: Active; commit: boolean }[] = [];
+  private staticDirty = false;
   private frame = 0;
   private penSeen = false;
 
@@ -71,7 +73,8 @@ export class DrawingEngine {
   setStrokes(strokes: readonly Stroke[]): void {
     this.strokes = [...strokes];
     this.paths.clear();
-    this.redraw();
+    this.staticDirty = true;
+    this.scheduleFrame();
   }
 
   /** Re-fits both canvases to the container at the current devicePixelRatio and redraws from the cached outlines. */
@@ -105,7 +108,7 @@ export class DrawingEngine {
   private onPointerDown = (e: PointerEvent): void => {
     if (e.pointerType === "pen") {
       this.penSeen = true;
-      if (this.active && this.active.pointerType !== "pen") this.abort();
+      if (this.active && this.active.pointerType !== "pen") this.finish(false);
     } else if (this.penSeen && this.active?.pointerType === "pen") {
       return;
     }
@@ -132,9 +135,7 @@ export class DrawingEngine {
   private onPointerMove = (e: PointerEvent): void => {
     const a = this.active;
     if (!a || e.pointerId !== a.pointerId) return;
-    const coalesced = e.getCoalescedEvents?.();
-    if (coalesced?.length) for (const c of coalesced) this.record(c);
-    else this.record(e);
+    this.recordCoalesced(a, e);
     a.predicted = (e.getPredictedEvents?.() ?? []).map((p) => this.toPoint(a, p));
     this.scheduleFrame();
   };
@@ -142,16 +143,29 @@ export class DrawingEngine {
   private onPointerUp = (e: PointerEvent): void => {
     const a = this.active;
     if (!a || e.pointerId !== a.pointerId) return;
-    this.commit(a);
+    this.recordCoalesced(a, e);
+    this.finish(true);
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
-    if (this.active?.pointerId === e.pointerId) this.abort();
+    if (this.active?.pointerId === e.pointerId) this.finish(false);
   };
+
+  private finish(commit: boolean): void {
+    this.ending.push({ a: this.active!, commit });
+    this.active = null;
+    this.scheduleFrame();
+  }
 
   private record(e: PointerEvent): void {
     const a = this.active!;
     a.points.push(this.toPoint(a, e));
+  }
+
+  private recordCoalesced(a: Active, e: PointerEvent): void {
+    const coalesced = e.getCoalescedEvents?.();
+    if (coalesced?.length) for (const c of coalesced) a.points.push(this.toPoint(a, c));
+    else a.points.push(this.toPoint(a, e));
   }
 
   private toPoint(a: Active, e: PointerEvent): InkPoint {
@@ -161,11 +175,17 @@ export class DrawingEngine {
   }
 
   private scheduleFrame(): void {
-    if (!this.frame) this.frame = requestAnimationFrame(this.drawLive);
+    if (!this.frame) this.frame = requestAnimationFrame(this.drawFrame);
   }
 
-  private drawLive = (): void => {
+  private drawFrame = (): void => {
     this.frame = 0;
+    for (const { a, commit } of this.ending) if (commit) this.commit(a);
+    this.ending = [];
+    if (this.staticDirty) {
+      this.staticDirty = false;
+      this.redraw();
+    }
     const a = this.active;
     this.clear(this.liveCtx);
     if (!a) return;
@@ -174,11 +194,7 @@ export class DrawingEngine {
   };
 
   private commit(a: Active): void {
-    this.active = null;
-    cancelAnimationFrame(this.frame);
-    this.frame = 0;
-    this.clear(this.liveCtx);
-    const points = fitToLimit(a.points);
+    const points = fitToLimit(a.points, a.hasPressure);
     const stroke: Stroke = {
       id: uuidv7(),
       day: this.day,
@@ -191,15 +207,8 @@ export class DrawingEngine {
       createdAt: Date.now(),
     };
     this.strokes.push(stroke);
-    this.fill(this.staticCtx, this.outline(stroke), a.color);
+    if (!this.staticDirty) this.fill(this.staticCtx, this.outline(stroke), a.color);
     this.onCommit(stroke);
-  }
-
-  private abort(): void {
-    this.active = null;
-    cancelAnimationFrame(this.frame);
-    this.frame = 0;
-    this.clear(this.liveCtx);
   }
 
   private outline(stroke: Stroke): Path2D {
@@ -232,8 +241,9 @@ export class DrawingEngine {
 }
 
 /** Simplifies with RDP, widening epsilon until the Stroke fits the codec's point limit. */
-function fitToLimit(points: InkPoint[]): InkPoint[] {
-  let out = simplify(points);
-  for (let eps = 0.001; out.length > MAX_STROKE_POINTS; eps *= 2) out = simplify(points, eps);
+function fitToLimit(points: InkPoint[], withPressure: boolean): InkPoint[] {
+  let out = simplify(points, undefined, withPressure);
+  for (let eps = 0.001; out.length > MAX_STROKE_POINTS; eps *= 2)
+    out = simplify(points, eps, withPressure);
   return out;
 }
