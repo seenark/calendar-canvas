@@ -24,7 +24,7 @@ function setup(me: () => Response) {
   const store = new DayStore();
   queryClient.setMutationDefaults(
     STROKE_OPS_KEY,
-    strokeOpsDefaults(queryClient, store, async () => {}),
+    strokeOpsDefaults(queryClient, store, { flush: async () => {}, onStored: () => () => {} }),
   );
   const posts: unknown[] = [];
   vi.stubGlobal(
