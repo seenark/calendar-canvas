@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/seenark/calendar-canvas/apps/server/internal/passhash"
 )
 
 const minSessionSecretBytes = 32
@@ -18,6 +20,13 @@ type Config struct {
 	GoogleClientSecret string
 	SessionSecret      []byte
 	AllowedEmails      Allowlist
+	AdminUsername      string
+	AdminPasswordHash  *passhash.Hash
+}
+
+// AdminEnabled reports whether Admin sign-in is configured.
+func (c Config) AdminEnabled() bool {
+	return c.AdminUsername != "" && c.AdminPasswordHash != nil
 }
 
 // Allowlist is the parsed ALLOWED_EMAILS value.
@@ -62,6 +71,7 @@ func parse(get func(string) string) (Config, error) {
 		GoogleClientID:     get("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: get("GOOGLE_CLIENT_SECRET"),
 		SessionSecret:      []byte(get("SESSION_SECRET")),
+		AdminUsername:      get("ADMIN_USERNAME"),
 	}
 
 	var errs []error
@@ -90,6 +100,14 @@ func parse(get func(string) string) (Config, error) {
 		errs = append(errs, err)
 	}
 	cfg.AllowedEmails = allowed
+
+	if raw := get("ADMIN_PASSWORD_HASH"); raw != "" {
+		hash, err := passhash.Parse(raw)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("ADMIN_PASSWORD_HASH is invalid: %w", err))
+		}
+		cfg.AdminPasswordHash = hash
+	}
 
 	if err := errors.Join(errs...); err != nil {
 		return Config{}, fmt.Errorf("invalid configuration:\n%w", err)
