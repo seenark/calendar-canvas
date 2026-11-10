@@ -8,6 +8,7 @@
     "build": "vp build",
     "serve": "vp preview",
     "start": "vp dev",
+    "test": "vp test",
     "check-types": "vp build && tsc --noEmit",
     "generate-pwa-assets": "pwa-assets-generator",
     "env:generate": "varlock codegen"
