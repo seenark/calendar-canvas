@@ -1,14 +1,17 @@
-import { DAY_ASPECT, DEFAULT_SIMPLIFY_EPSILON } from "./constants";
+import { DAY_ASPECT, DEFAULT_SIMPLIFY_EPSILON, PRESSURE_EPSILON } from "./constants";
 import type { InkPoint } from "./point";
 
 /**
  * Ramer–Douglas–Peucker. `epsilon` is in width units; y is scaled by DAY_ASPECT so distances are isotropic.
- * Always keeps the first and last points.
+ * Always keeps the first and last points. With `withPressure`, a point whose pressure strays from the
+ * linear interpolation of its neighbours by more than PRESSURE_EPSILON is kept too.
  */
 export function simplify<P extends InkPoint>(
   points: readonly P[],
   epsilon = DEFAULT_SIMPLIFY_EPSILON,
+  withPressure = false,
 ): P[] {
+  const pressureScale = epsilon / PRESSURE_EPSILON;
   const n = points.length;
   if (n <= 2) return [...points];
   const keep = new Uint8Array(n);
@@ -19,7 +22,13 @@ export function simplify<P extends InkPoint>(
     let maxDist = 0;
     let index = -1;
     for (let i = lo + 1; i < hi; i++) {
-      const d = distanceToSegment(points[i]!, points[lo]!, points[hi]!);
+      let d = distanceToSegment(points[i]!, points[lo]!, points[hi]!);
+      if (withPressure) {
+        const pLo = points[lo]!.pressure ?? 0;
+        const pHi = points[hi]!.pressure ?? 0;
+        const expected = pLo + ((pHi - pLo) * (i - lo)) / (hi - lo);
+        d = Math.max(d, Math.abs((points[i]!.pressure ?? 0) - expected) * pressureScale);
+      }
       if (d > maxDist) {
         maxDist = d;
         index = i;
