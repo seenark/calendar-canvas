@@ -2,6 +2,7 @@ package api
 
 import (
 	"log/slog"
+	"mime"
 	"net/http"
 	"time"
 
@@ -41,4 +42,26 @@ func noStoreAPI(c *gin.Context) {
 		c.Header("Cache-Control", "no-store")
 	}
 	c.Next()
+}
+
+// csrf requires the app's own Origin on every non-GET request and a JSON Content-Type on every request with a body.
+func csrf(origin string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		switch c.Request.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			c.Next()
+			return
+		}
+		if c.GetHeader("Origin") != origin {
+			abortError(c, http.StatusForbidden, "forbidden_origin", "request origin is not allowed")
+			return
+		}
+		if c.Request.ContentLength != 0 {
+			if mt, _, err := mime.ParseMediaType(c.GetHeader("Content-Type")); err != nil || mt != "application/json" {
+				abortError(c, http.StatusUnsupportedMediaType, "unsupported_media_type", "Content-Type must be application/json")
+				return
+			}
+		}
+		c.Next()
+	}
 }

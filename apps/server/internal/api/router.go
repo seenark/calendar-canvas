@@ -7,6 +7,9 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
+	"github.com/seenark/calendar-canvas/apps/server/internal/config"
 )
 
 const healthPath = "/api/health"
@@ -16,7 +19,7 @@ const (
 	cacheImmutable  = "public, max-age=31536000, immutable"
 )
 
-func NewRouter(spa fs.FS) *gin.Engine {
+func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service) *gin.Engine {
 	r := gin.New()
 	r.RedirectTrailingSlash = false
 	r.RedirectFixedPath = false
@@ -25,6 +28,14 @@ func NewRouter(spa fs.FS) *gin.Engine {
 	r.GET(healthPath, func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
+
+	api := r.Group("/api", csrf(cfg.AppBaseURL))
+	api.GET("/auth/google/start", startLogin(svc))
+	api.GET("/auth/google/callback", finishLogin(svc))
+	signedIn := requireRole(svc, auth.RoleUser, auth.RoleAdmin)
+	api.POST("/auth/logout", signedIn, logout(svc))
+	api.GET("/me", signedIn, me)
+
 	r.NoRoute(serveSPA(spa))
 	return r
 }

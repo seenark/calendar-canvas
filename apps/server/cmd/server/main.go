@@ -13,19 +13,27 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/oauth2"
 
 	"github.com/seenark/calendar-canvas/apps/server/internal/api"
+	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
 	"github.com/seenark/calendar-canvas/apps/server/internal/config"
 	"github.com/seenark/calendar-canvas/apps/server/internal/static"
+	"github.com/seenark/calendar-canvas/apps/server/internal/store"
 )
 
-func main() {
-	cfg := config.Load()
+const googleIssuer = "https://accounts.google.com"
 
+var googleEndpoint = oauth2.Endpoint{
+	AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+	TokenURL: "https://oauth2.googleapis.com/token",
+}
+
+func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "healthcheck":
-			if err := healthcheck(cfg); err != nil {
+			if err := healthcheck(config.Port()); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -36,6 +44,11 @@ func main() {
 		}
 	}
 
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if err := serve(cfg); err != nil {
 		slog.Error("server stopped", "error", err)
 		os.Exit(1)
@@ -45,14 +58,25 @@ func main() {
 func serve(cfg config.Config) error {
 	gin.SetMode(gin.ReleaseMode)
 
-	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           api.NewRouter(static.FS()),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	conn, err := store.Open(cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	svc, err := auth.New(ctx, cfg, googleIssuer, googleEndpoint, store.New(conn))
+	if err != nil {
+		return err
+	}
+
+	srv := &http.Server{
+		Addr:              ":" + cfg.Port,
+		Handler:           api.NewRouter(static.FS(), cfg, svc),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -72,9 +96,9 @@ func serve(cfg config.Config) error {
 	return nil
 }
 
-func healthcheck(cfg config.Config) error {
+func healthcheck(port string) error {
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://" + net.JoinHostPort("127.0.0.1", cfg.Port) + "/api/health")
+	resp, err := client.Get("http://" + net.JoinHostPort("127.0.0.1", port) + "/api/health")
 	if err != nil {
 		return err
 	}
