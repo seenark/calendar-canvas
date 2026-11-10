@@ -115,6 +115,7 @@ export class DrawingEngine {
       canvas.width = Math.round(box.width * this.ratio);
       canvas.height = Math.round(box.height * this.ratio);
     }
+    this.staticDirty = false;
     this.redraw();
     if (this.active) {
       this.active.rect = this.liveCanvas.getBoundingClientRect();
@@ -134,16 +135,25 @@ export class DrawingEngine {
     this.layer.remove();
   }
 
+  /** A primary touch starts a new gesture, so anything still tracked is left over from a missed pointerup. */
+  private resetTouches(): void {
+    this.touches.clear();
+    if (this.active?.pointerType === "touch") this.finish(false);
+    if (this.pinch) this.endPinch();
+  }
+
   private onPointerDown = (e: PointerEvent): void => {
-    if (this.pinch) return;
     if (e.pointerType === "pen") {
       this.penSeen = true;
       if (this.active && this.active.pointerType !== "pen") this.finish(false);
     } else if (this.penSeen && this.active?.pointerType === "pen") {
       return;
     }
-    if (e.pointerType === "touch" && this.trackTouch(e)) return;
-    if (this.active || e.button > 0) return;
+    if (e.pointerType === "touch") {
+      if (e.isPrimary) this.resetTouches();
+      if (this.trackTouch(e)) return;
+    }
+    if (this.pinch || this.active || e.button > 0) return;
     const kind = this.store.get(toolAtom);
     const { color, size } =
       kind === "pen"
@@ -194,25 +204,34 @@ export class DrawingEngine {
     if (this.active?.pointerId === e.pointerId) this.finish(false);
   };
 
-  /** Returns true when this touch started a pinch: the Stroke it interrupted is cancelled, never committed. */
+  /** Returns true when this touch belongs to a pinch: the Stroke it interrupted is cancelled, never committed. */
   private trackTouch(e: PointerEvent): boolean {
     this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this.touches.size < 2) return false;
     if (this.active) this.finish(false);
     this.liveCanvas.setPointerCapture(e.pointerId);
     e.preventDefault();
+    if (!this.pinch) this.startPinch();
+    return true;
+  }
+
+  private startPinch(): void {
     const ids = [...this.touches.keys()].slice(0, 2) as [number, number];
     const rect = this.container.getBoundingClientRect();
     const origin = { x: rect.left, y: rect.top };
     this.pinch = { ids, origin, start: this.zoom, from: this.pinchPoints(ids, origin) };
-    return true;
+  }
+
+  private endPinch(): void {
+    this.pinch = null;
+    this.settleZoom = true;
+    this.scheduleFrame();
   }
 
   private untrackTouch(e: PointerEvent): void {
     if (!this.touches.delete(e.pointerId) || !this.pinch?.ids.includes(e.pointerId)) return;
-    this.pinch = null;
-    this.settleZoom = true;
-    this.scheduleFrame();
+    if (this.touches.size >= 2) this.startPinch();
+    else this.endPinch();
   }
 
   private pinchPoints(ids: [number, number], origin: Pt): [Pt, Pt] {
@@ -262,24 +281,26 @@ export class DrawingEngine {
     if (this.zoomDirty) {
       this.zoomDirty = false;
       this.layer.style.transform = zoomTransform(this.zoom);
+      if (this.active) this.active.rect = this.liveCanvas.getBoundingClientRect();
     }
+    const cancelled = this.ending.length > 0;
+    for (const { a, commit } of this.ending) {
+      if (commit) this.commit(a);
+      else if (a.kind === "eraser") this.staticDirty = true;
+    }
+    this.ending = [];
     if (this.settleZoom) {
       this.settleZoom = false;
       const box = { width: this.container.clientWidth, height: this.container.clientHeight };
       if (backingRatio(window.devicePixelRatio || 1, this.zoom.scale, box) !== this.ratio)
         this.resize();
     }
-    for (const { a, commit } of this.ending) {
-      if (commit) this.commit(a);
-      else if (a.kind === "eraser") this.staticDirty = true;
-    }
-    this.ending = [];
     if (this.staticDirty) {
       this.staticDirty = false;
       this.redraw();
     }
     const a = this.active;
-    this.clear(this.liveCtx);
+    if (a || cancelled) this.clear(this.liveCtx);
     if (!a) return;
     if (a.kind === "eraser") {
       this.eraseOverSnapshot(strokePath(a.points, a.size, "eraser", false, false));
