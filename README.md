@@ -76,7 +76,13 @@ You need Docker with Compose, a Google OAuth client, and, for a public instance,
 
    The app listens on <http://127.0.0.1:8080>. For a local-only trial, set `APP_BASE_URL=http://localhost:8080` and use `http://localhost:8080/api/auth/google/callback` as the Google redirect URI.
 
-   To build the image from this checkout instead, run `bun run docker:up`.
+   To build the image from this checkout for local-only use, run:
+
+   ```bash
+   docker compose up -d --build app
+   ```
+
+   `bun run docker:up` builds and starts every service, including `cloudflared`; that service needs `TUNNEL_TOKEN`.
 
 3. For a public instance, add the tunnel. See [Cloudflare Tunnel](#cloudflare-tunnel).
 
@@ -84,7 +90,18 @@ You need Docker with Compose, a Google OAuth client, and, for a public instance,
    docker compose up -d
    ```
 
+   This also starts `cloudflared`, which needs `TUNNEL_TOKEN`.
+
 Why the port binds to `127.0.0.1`: the app must be reachable only through the tunnel. The server trusts the `CF-Connecting-IP` header to rate-limit Admin sign-in per client. Anyone who could reach the port directly could forge that header. Do not change the mapping to `0.0.0.0` or publish the port through another proxy.
+
+Update to a new release:
+
+```bash
+docker compose pull app
+docker compose up -d app
+```
+
+Check the app: `curl http://127.0.0.1:8080/api/health` returns `{"status":"ok"}`. The compose health check runs `/server healthcheck`.
 
 Update to a new release:
 
@@ -195,7 +212,7 @@ Admin sign-in is optional. It lets you list users and delete them, together with
 1. Pick a password and generate its hash. The password is read from stdin, one line:
 
    ```bash
-   read -rs -p "Admin password: " PW; echo
+   printf 'Admin password: '; read -rs PW; echo
    printf '%s' "$PW" | docker compose run --rm -T app hash-password
    ```
 
@@ -212,7 +229,7 @@ Admin sign-in is optional. It lets you list users and delete them, together with
    ADMIN_PASSWORD_HASH='<output>'
    ```
 
-3. Restart with `docker compose up -d`, then open `https://<your host>/admin`.
+3. Restart the local-only app with `docker compose up -d app`, then open `https://<your host>/admin`.
 
 Admin sign-in attempts are rate-limited per client IP.
 
@@ -233,9 +250,10 @@ Restore into an empty volume:
 
 ```bash
 docker compose down
+docker volume rm calendar-canvas_data
 docker run --rm -v calendar-canvas_data:/data -v "$PWD":/backup alpine \
   tar xzf /backup/calendar-canvas-data.tgz -C /data
-docker compose up -d
+docker compose up -d app
 ```
 
 A deleted stroke stays as a tombstone for 30 days. A daily job then removes it for good.
