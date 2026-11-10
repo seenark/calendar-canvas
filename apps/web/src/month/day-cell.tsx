@@ -4,6 +4,7 @@ import { cn } from "@calendar-canvas/ui/lib/utils";
 
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, parseDay } from "@/lib/date";
+import { Thumbnail } from "@/thumbnails/thumbnail";
 
 export function DayCell({ day, isToday }: { day: string; isToday: boolean }) {
   return (
@@ -18,7 +19,7 @@ export function DayCell({ day, isToday }: { day: string; isToday: boolean }) {
       )}
       style={{ aspectRatio: `1 / ${DAY_ASPECT}` }}
     >
-      <span data-slot="thumbnail" className="pointer-events-none absolute inset-0" />
+      <Thumbnail day={day} />
       <span className={cn("relative", isToday && "font-bold")}>{Number(day.slice(8))}</span>
     </Link>
   );
