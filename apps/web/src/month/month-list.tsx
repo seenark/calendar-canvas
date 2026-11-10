@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { monthIndex, toDayKey, yearMonthOfIndex } from "@/lib/date";
+import { useMonths } from "@/sync/queries";
 
 import { HEADING_HEIGHT, MONTH_RANGE, monthItemHeight } from "./layout";
 import { MonthItem } from "./month-item";
@@ -40,6 +41,12 @@ export function MonthList({
     estimateSize: (index) => monthItemHeight(width, yearMonthAt(index)),
     overscan: 2,
   });
+
+  const firstVisible = virtualizer.range?.startIndex ?? indexOf(initialMonth);
+  const lastVisible = virtualizer.range?.endIndex ?? firstVisible;
+  useMonths(
+    Array.from({ length: lastVisible - firstVisible + 1 }, (_, i) => yearMonthAt(firstVisible + i)),
+  );
 
   useLayoutEffect(() => {
     const el = scrollRef.current!;

@@ -10,6 +10,7 @@ import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, monthOfDay, parseDay } from "@/lib/date";
 import { toolAtom } from "@/state/tool";
 import { dayStore } from "@/sync/day-store";
+import { useMonths } from "@/sync/queries";
 
 export const Route = createFileRoute("/_calendar/d/$date")({
   beforeLoad: ({ params }) => {
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/_calendar/d/$date")({
 function DrawingPage() {
   const { date } = Route.useParams();
   const router = useRouter();
+  useMonths([monthOfDay(date)]);
   const paperRef = useRef<HTMLDivElement>(null);
   const [paperWidth, setPaperWidth] = useState(0);
   const canUndo = useSyncExternalStore(

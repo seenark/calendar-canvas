@@ -4,8 +4,18 @@ import ReactDOM from "react-dom/client";
 
 import Loader from "./components/loader";
 import { routeTree } from "./routeTree.gen";
+import { dayStore } from "./sync/day-store";
+import { STROKE_OPS_KEY, sendOps, strokeOpsDefaults } from "./sync/mutations";
+import { bindMonthsToStore } from "./sync/queries";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, refetchOnWindowFocus: true, refetchOnReconnect: true },
+  },
+});
+queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, dayStore));
+bindMonthsToStore(queryClient, dayStore);
+dayStore.subscribeOps(() => sendOps(queryClient, dayStore));
 
 const router = createRouter({
   routeTree,
