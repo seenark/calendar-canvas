@@ -4,10 +4,10 @@ import { strokeBBox } from "@/ink/bbox";
 import { fitToLimit } from "@/ink/rdp";
 import type { InkPoint } from "@/ink/point";
 import { uuidv7 } from "@/lib/uuid";
-import { penAtom, toolAtom } from "@/state/tool";
+import { eraserAtom, penAtom, toolAtom } from "@/state/tool";
 
-import { REF_WIDTH, strokePath } from "./outline";
-import type { Stroke } from "./stroke";
+import { REF_HEIGHT, REF_WIDTH, strokePath } from "./outline";
+import type { Stroke, StrokeKind } from "./stroke";
 
 export type DrawingEngineOptions = {
   /** Sized by CSS to the Day's aspect ratio. The engine fills it with its two canvases. */
@@ -20,7 +20,8 @@ export type DrawingEngineOptions = {
 type Active = {
   pointerId: number;
   pointerType: string;
-  color: string;
+  kind: StrokeKind;
+  color: string | null;
   size: number;
   hasPressure: boolean;
   points: InkPoint[];
@@ -30,6 +31,8 @@ type Active = {
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
+const RING_COLOR = "#4c4f69";
+
 /** Plain TypeScript, no React. Layers above the container's CSS background: static canvas (committed Strokes), live canvas (the Stroke in progress). */
 export class DrawingEngine {
   private readonly container: HTMLElement;
@@ -38,6 +41,9 @@ export class DrawingEngine {
   private readonly onCommit: (stroke: Stroke) => void;
   private readonly staticCanvas = document.createElement("canvas");
   private readonly liveCanvas = document.createElement("canvas");
+  /** The static canvas as it was before the active Eraser began. Every Eraser frame is this plus one full outline. */
+  private readonly snapshot = document.createElement("canvas");
+  private snapshotValid = false;
   private readonly staticCtx: CanvasRenderingContext2D;
   private readonly liveCtx: CanvasRenderingContext2D;
   private readonly observer: ResizeObserver;
@@ -114,14 +120,18 @@ export class DrawingEngine {
       return;
     }
     if (this.active || e.button > 0) return;
-    if (this.store.get(toolAtom) !== "pen") return;
-    const { color, size } = this.store.get(penAtom);
-    const hasPressure = e.pointerType === "pen";
+    const kind = this.store.get(toolAtom);
+    const { color, size } =
+      kind === "pen"
+        ? this.store.get(penAtom)
+        : { color: null, size: this.store.get(eraserAtom).size };
+    const hasPressure = kind === "pen" && e.pointerType === "pen";
     this.liveCanvas.setPointerCapture(e.pointerId);
     e.preventDefault();
     this.active = {
       pointerId: e.pointerId,
       pointerType: e.pointerType,
+      kind,
       color,
       size,
       hasPressure,
@@ -181,7 +191,10 @@ export class DrawingEngine {
 
   private drawFrame = (): void => {
     this.frame = 0;
-    for (const { a, commit } of this.ending) if (commit) this.commit(a);
+    for (const { a, commit } of this.ending) {
+      if (commit) this.commit(a);
+      else if (a.kind === "eraser") this.staticDirty = true;
+    }
     this.ending = [];
     if (this.staticDirty) {
       this.staticDirty = false;
@@ -190,7 +203,12 @@ export class DrawingEngine {
     const a = this.active;
     this.clear(this.liveCtx);
     if (!a) return;
-    const path = strokePath([...a.points, ...a.predicted], a.size, a.hasPressure, false);
+    if (a.kind === "eraser") {
+      this.eraseOverSnapshot(strokePath(a.points, a.size, "eraser", false, false));
+      this.drawRing(a);
+      return;
+    }
+    const path = strokePath([...a.points, ...a.predicted], a.size, "pen", a.hasPressure, false);
     this.fill(this.liveCtx, path, a.color);
   };
 
@@ -199,12 +217,12 @@ export class DrawingEngine {
     const stroke: Stroke = {
       id: uuidv7(),
       day: this.day,
-      kind: "pen",
+      kind: a.kind,
       color: a.color,
       size: a.size,
       points,
       hasPressure: a.hasPressure,
-      bbox: strokeBBox(points, a.size, "pen"),
+      bbox: strokeBBox(points, a.size, a.kind),
       createdAt: Date.now(),
     };
     this.strokes.push(stroke);
@@ -214,23 +232,63 @@ export class DrawingEngine {
 
   private commit(a: Active): void {
     const stroke = this.finalize(a);
-    if (!this.staticDirty) this.fill(this.staticCtx, this.outline(stroke), a.color);
+    if (this.staticDirty) return;
+    if (stroke.kind === "eraser") this.staticDirty = true;
+    else this.fill(this.staticCtx, this.outline(stroke), stroke.color);
   }
 
   private outline(stroke: Stroke): Path2D {
     let path = this.paths.get(stroke.id);
     if (!path) {
-      path = strokePath(stroke.points, stroke.size, stroke.hasPressure, true);
+      path = strokePath(stroke.points, stroke.size, stroke.kind, stroke.hasPressure, true);
       this.paths.set(stroke.id, path);
     }
     return path;
   }
 
   private redraw(): void {
+    this.snapshotValid = false;
     this.clear(this.staticCtx);
-    for (const s of this.strokes) {
-      if (s.kind === "pen") this.fill(this.staticCtx, this.outline(s), s.color!);
+    for (const s of this.strokes) this.fill(this.staticCtx, this.outline(s), s.color);
+  }
+
+  /**
+   * Live Eraser preview: restores the pre-Eraser pixels and erases one whole outline from them. Edge pixels
+   * differ slightly from `redraw` (Chrome rasterizes drawImage then destination-out in one batch), so a
+   * committed Eraser repaints through `redraw` instead of keeping this result.
+   */
+  private eraseOverSnapshot(outline: Path2D): void {
+    if (!this.snapshotValid) this.takeSnapshot();
+    const ctx = this.staticCtx;
+    this.clear(ctx);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(this.snapshot, 0, 0);
+    this.fill(ctx, outline, null);
+  }
+
+  private takeSnapshot(): void {
+    const { width, height } = this.staticCanvas;
+    if (this.snapshot.width !== width || this.snapshot.height !== height) {
+      this.snapshot.width = width;
+      this.snapshot.height = height;
     }
+    const ctx = this.snapshot.getContext("2d")!;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(this.staticCanvas, 0, 0);
+    this.snapshotValid = true;
+  }
+
+  private drawRing(a: Active): void {
+    const p = a.predicted.at(-1) ?? a.points.at(-1);
+    if (!p) return;
+    const ctx = this.liveCtx;
+    const scale = ctx.canvas.width / REF_WIDTH;
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.beginPath();
+    ctx.arc(p.x * REF_WIDTH, p.y * REF_HEIGHT, (a.size * REF_WIDTH) / 2, 0, 2 * Math.PI);
+    ctx.lineWidth = (window.devicePixelRatio || 1) / scale;
+    ctx.strokeStyle = RING_COLOR;
+    ctx.stroke();
   }
 
   private clear(ctx: CanvasRenderingContext2D): void {
@@ -238,10 +296,12 @@ export class DrawingEngine {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   }
 
-  private fill(ctx: CanvasRenderingContext2D, path: Path2D, color: string): void {
+  /** A null colour is the Eraser: it removes what is already on the canvas. */
+  private fill(ctx: CanvasRenderingContext2D, path: Path2D, color: string | null): void {
     const scale = ctx.canvas.width / REF_WIDTH;
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.fillStyle = color;
+    ctx.globalCompositeOperation = color === null ? "destination-out" : "source-over";
+    if (color !== null) ctx.fillStyle = color;
     ctx.fill(path);
   }
 }
