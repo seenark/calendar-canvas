@@ -19,7 +19,7 @@ import { bindMonthsToStore, decodeMonth, monthKey, monthQuery, type MonthStrokes
 
 const DAY = "2026-11-10";
 const MONTH = "2026-11";
-const stored = { flush: async () => {}, nextStored: async () => {} };
+const stored = { flush: async () => {}, onStored: () => () => {} };
 
 afterEach(() => vi.unstubAllGlobals());
 

@@ -9,7 +9,7 @@ import { monthOfDay } from "@/lib/date";
 import { BATCH_LIMITS, splitBatches } from "./batches";
 import { holdBuffer } from "./buffer";
 import type { DayStore } from "./day-store";
-import type { SentOp } from "./ops";
+import { opStrokeId, type SentOp } from "./ops";
 import type { QueryCachePersister } from "./persister";
 import { monthKey, monthQuery, type MonthStrokes } from "./queries";
 import { shouldRetry, retryDelay } from "./retry";
@@ -45,14 +45,29 @@ export const sendBatch = ({ ops }: StrokeOpsVariables) =>
 
 /**
  * Defaults for `['strokeOps']`. `sendOps` keeps at most one batch in flight, so `scope` is a second guard.
- * Settled Ops stay in the saved buffer until `persister` has stored a cache write that includes their Strokes.
- * A failed write keeps the hold and the next successful write releases it.
+ * A settled Op stays in the saved buffer until `persister` has stored a write whose month data holds its Stroke
+ * at the settled `seq` (or without it, for a delete). With no month query, a failed prefetch or a failed write
+ * the hold stays, and the first later write that has the month data releases it.
+ * shortcut: a Stroke another device removes before the write never matches, so the hold lasts until restart.
  */
 export function strokeOpsDefaults(
   queryClient: QueryClient,
   store: DayStore,
-  persister: Pick<QueryCachePersister, "flush" | "nextStored">,
+  persister: Pick<QueryCachePersister, "flush" | "onStored">,
 ): MutationOptions<OpsResponse, Error, StrokeOpsVariables> {
+  const awaiting = new Map<
+    string,
+    { month: string; day: string; seq?: number; release: () => void }
+  >();
+  persister.onStored(({ queries }) => {
+    for (const [id, { month, day, seq, release }] of awaiting) {
+      const saved = queries.find((q) => q.queryKey[0] === "month" && q.queryKey[1] === month);
+      const data = saved?.state.data as MonthStrokes | undefined;
+      if (!data || data[day]?.find((stroke) => stroke.id === id)?.seq !== seq) continue;
+      awaiting.delete(id);
+      release();
+    }
+  });
   return {
     scope: { id: "strokeOps" },
     networkMode: "online",
@@ -69,10 +84,20 @@ export function strokeOpsDefaults(
       await Promise.all(
         stale.map((month) => queryClient.cancelQueries({ queryKey: monthKey(month), exact: true })),
       );
-      const release = holdBuffer();
+      const guard = holdBuffer();
       const loads: Promise<unknown>[] = [];
       try {
         const settled = store.settle(ops, response.results, Date.now());
+        for (const op of ops) {
+          const id = opStrokeId(op);
+          awaiting.get(id)?.release();
+          awaiting.set(id, {
+            month: monthOfDay(op.day),
+            day: op.day,
+            seq: settled.get(op.day)?.find((stroke) => stroke.id === id)?.seq,
+            release: holdBuffer(),
+          });
+        }
         for (const month of months) {
           const key = monthKey(month);
           // Without cached data there is nothing to merge into. A fetch started here reads after the commit,
@@ -87,9 +112,10 @@ export function strokeOpsDefaults(
           }));
         }
       } finally {
+        guard();
         void Promise.all(loads)
-          .then(() => persister.flush().catch(() => persister.nextStored()))
-          .then(release);
+          .then(() => persister.flush())
+          .catch(() => {});
       }
     },
     onError: (_error, { ops }) => store.release(ops),

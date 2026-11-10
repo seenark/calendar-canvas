@@ -55,7 +55,7 @@ async function reopen() {
   return store.getSnapshot(DAY).strokes.map((s) => s.id);
 }
 
-function setup() {
+function setup({ seedMonth = true } = {}) {
   const queryClient = new QueryClient();
   const store = new DayStore();
   const persister = createQueryCachePersister(queryClient);
@@ -63,7 +63,8 @@ function setup() {
   bindMonthsToStore(queryClient, store);
   persistBuffer(store);
   store.subscribeOps(() => sendOps(queryClient, store));
-  queryClient.setQueryData<MonthStrokes>(monthKey(MONTH), { [DAY]: [confirmed("x", 1)] });
+  if (seedMonth)
+    queryClient.setQueryData<MonthStrokes>(monthKey(MONTH), { [DAY]: [confirmed("x", 1)] });
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => Response.json({ results: [{ id: "a", seq: 2 }] })),
@@ -109,6 +110,24 @@ describe("settling an Op", () => {
     await persister.flush();
     await vi.waitFor(() => expect(disk.get(BUFFER_KEY)).toEqual({ ops: [], strokes: [] }));
     expect(await reopen()).toEqual(["x", "a"]);
+  });
+
+  it("keeps the Op while its month is not cached and releases it once a saved month holds its Stroke", async () => {
+    const { queryClient, store, persister } = setup({ seedMonth: false });
+
+    store.commitStroke(stroke("a"));
+    await vi.waitFor(() => expect(store.pendingCount()).toBe(0));
+    await persister.flush();
+    await tick();
+
+    expect(disk.get(CACHE_KEY)).toBeDefined();
+    expect(disk.get(BUFFER_KEY)).toMatchObject({ ops: [{ op: "add" }] });
+    expect(await reopen()).toEqual(["a"]);
+
+    queryClient.setQueryData<MonthStrokes>(monthKey(MONTH), { [DAY]: [confirmed("a", 2)] });
+    await persister.flush();
+    await vi.waitFor(() => expect(disk.get(BUFFER_KEY)).toEqual({ ops: [], strokes: [] }));
+    expect(await reopen()).toEqual(["a"]);
   });
 });
 

@@ -1,4 +1,9 @@
-import { dehydrate, type DehydrateOptions, type QueryClient } from "@tanstack/react-query";
+import {
+  dehydrate,
+  type DehydratedState,
+  type DehydrateOptions,
+  type QueryClient,
+} from "@tanstack/react-query";
 import type {
   PersistedClient,
   Persister,
@@ -19,8 +24,8 @@ const dehydrateOptions: DehydrateOptions = {
 export type QueryCachePersister = Persister & {
   /** Writes the live query cache and resolves once that write is stored. The write starts after the call. Rejects when it fails. */
   flush(): Promise<void>;
-  /** Resolves after the next successful write that starts after the call, whoever scheduled it. Never rejects. */
-  nextStored(): Promise<void>;
+  /** Calls `listener` with the dehydrated cache of every successful write, whoever scheduled it. Returns the unsubscribe function. */
+  onStored(listener: (stored: DehydratedState) => void): () => void;
 };
 
 const outcome = () => {
@@ -39,6 +44,7 @@ export function createQueryCachePersister(queryClient: QueryClient): QueryCacheP
   let timer: ReturnType<typeof setTimeout> | undefined;
   let chain = Promise.resolve();
   let upcoming = outcome();
+  const listeners = new Set<(stored: DehydratedState) => void>();
 
   const write = async () => {
     queued = false;
@@ -52,6 +58,7 @@ export function createQueryCachePersister(queryClient: QueryClient): QueryCacheP
         clientState: dehydrate(queryClient, dehydrateOptions),
       };
       await set(CACHE_KEY, JSON.stringify(client));
+      for (const listener of listeners) listener(client.clientState);
       mine.resolve();
     } catch (error) {
       dirty = true;
@@ -84,12 +91,9 @@ export function createQueryCachePersister(queryClient: QueryClient): QueryCacheP
       enqueue();
       return result;
     },
-    nextStored: async () => {
-      for (;;) {
-        try {
-          return await upcoming.promise;
-        } catch {}
-      }
+    onStored: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
   };
 }
