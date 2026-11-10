@@ -49,7 +49,10 @@ function AdminLoginPage() {
 
   return (
     <main className="grid flex-1 place-items-center p-6">
-      <form onSubmit={submit} className="bg-paper text-paper-foreground flex w-full max-w-xs flex-col gap-4 p-6">
+      <form
+        onSubmit={submit}
+        className="bg-paper text-paper-foreground flex w-full max-w-xs flex-col gap-4 p-6"
+      >
         <h1 className="text-xl font-bold">ผู้ดูแลระบบ</h1>
         <div className="flex flex-col gap-2">
           <Label htmlFor="username">ชื่อผู้ใช้</Label>
@@ -57,7 +60,13 @@ function AdminLoginPage() {
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="password">รหัสผ่าน</Label>
-          <Input id="password" name="password" type="password" autoComplete="current-password" required />
+          <Input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+          />
         </div>
         {error && (
           <p role="alert" className="text-destructive text-sm">

@@ -14,7 +14,9 @@ export const Route = createFileRoute("/admin/")({
 });
 
 const formatTime = (ms: number | null) =>
-  ms === null ? "-" : new Date(ms).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+  ms === null
+    ? "-"
+    : new Date(ms).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
 
 function AdminPage() {
   const queryClient = useQueryClient();
@@ -47,7 +49,11 @@ function AdminPage() {
         </Button>
       </header>
       {users.isPending && <p>กำลังโหลด…</p>}
-      {users.isError && <p role="alert" className="text-destructive">โหลดรายชื่อผู้ใช้ไม่สำเร็จ</p>}
+      {users.isError && (
+        <p role="alert" className="text-destructive">
+          โหลดรายชื่อผู้ใช้ไม่สำเร็จ
+        </p>
+      )}
       {users.data?.length === 0 && <p>ยังไม่มีผู้ใช้</p>}
       {users.data && users.data.length > 0 && (
         <div className="overflow-x-auto">
