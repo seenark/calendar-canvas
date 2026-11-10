@@ -84,16 +84,14 @@ function ThumbnailCanvas({
     if (!visible || !size || size.width === 0 || size.height === 0) return;
     const ctx = ref.current!.getContext("bitmaprenderer")!;
     const abort = new AbortController();
-    thumbnails
-      .render({ day, revision, strokes, dpr, ...size }, abort.signal)
-      .then((bitmap) => {
-        if (!bitmap) return;
-        const canvas = ref.current!;
-        // transferFromImageBitmap leaves width/height at 300x150, which CellThumbnailCopy reads as the bitmap size.
-        canvas.width = bitmap.width;
-        canvas.height = bitmap.height;
-        ctx.transferFromImageBitmap(bitmap);
-      });
+    thumbnails.render({ day, revision, strokes, dpr, ...size }, abort.signal).then((bitmap) => {
+      if (!bitmap) return;
+      const canvas = ref.current!;
+      // transferFromImageBitmap leaves width/height at 300x150, which CellThumbnailCopy reads as the bitmap size.
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      ctx.transferFromImageBitmap(bitmap);
+    });
     return () => abort.abort();
   }, [day, revision, strokes, size, visible, dpr]);
 
