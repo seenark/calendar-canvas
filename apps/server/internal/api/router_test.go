@@ -119,18 +119,22 @@ func TestIndexHTMLRedirectsToRoot(t *testing.T) {
 
 func TestStaticServingStaysInsideFS(t *testing.T) {
 	r := newTestRouter()
-	tests := []struct{ target, body string }{
-		{"/../sw.js", "sw"},
-		{"/assets/../../sw.js", "sw"},
-		{"/%2e%2e/sw.js", "sw"},
-		{"/assets/../../etc/passwd", "<html>app</html>"},
-		{"/assets/", "<html>app</html>"},
-		{"/assets/..", "<html>app</html>"},
+	tests := []struct {
+		target string
+		status int
+		body   string
+	}{
+		{"/../sw.js", http.StatusBadRequest, "invalid URL path\n"},
+		{"/assets/../../sw.js", http.StatusBadRequest, "invalid URL path\n"},
+		{"/%2e%2e/sw.js", http.StatusBadRequest, "invalid URL path\n"},
+		{"/assets/../../etc/passwd", http.StatusOK, "<html>app</html>"},
+		{"/assets/", http.StatusOK, "<html>app</html>"},
+		{"/assets/..", http.StatusOK, "<html>app</html>"},
 	}
 	for _, tt := range tests {
 		w := do(r, http.MethodGet, tt.target, nil)
-		if w.Code != http.StatusOK || w.Body.String() != tt.body {
-			t.Errorf("%s: status %d body %q, want 200 %q", tt.target, w.Code, w.Body.String(), tt.body)
+		if w.Code != tt.status || w.Body.String() != tt.body {
+			t.Errorf("%s: status %d body %q, want %d %q", tt.target, w.Code, w.Body.String(), tt.status, tt.body)
 		}
 	}
 }
