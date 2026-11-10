@@ -13,7 +13,7 @@ import { dayLayoutId, isDayCellOnScreen } from "@/month/day-cell";
 import { toolAtom } from "@/state/tool";
 import { dayStore } from "@/sync/day-store";
 import { useMonths } from "@/sync/queries";
-import { Thumbnail } from "@/thumbnails/thumbnail";
+import { CellThumbnailCopy, Thumbnail } from "@/thumbnails/thumbnail";
 
 /** Longest the engine waits for the expand animation before it mounts anyway. */
 const EXPAND_TIMEOUT_MS = 1000;
@@ -21,8 +21,9 @@ const EXPAND_TIMEOUT_MS = 1000;
 const FADE = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
 
 /**
- * The Day's paper shares a layout with its Day cell. While it expands the paper shows the Day's
- * thumbnail, and the DrawingEngine mounts once the expand animation ends.
+ * The Day's paper shares a layout with its Day cell. While it expands the paper shows the Day cell's
+ * bitmap stretched to the paper, then the sharper paper-size thumbnail once the worker delivers it, and
+ * the DrawingEngine mounts once the expand animation ends. Without a Day cell the paper fades like the rest.
  */
 export function DrawingPage({ date }: { date: string }) {
   const router = useRouter();
@@ -120,7 +121,9 @@ export function DrawingPage({ date }: { date: string }) {
             width: `min(100cqw, calc(100cqh / ${DAY_ASPECT}))`,
             aspectRatio: `1 / ${DAY_ASPECT}`,
           }}
+          {...(shared ? {} : FADE)}
         >
+          {!drawn && shared && <CellThumbnailCopy day={date} />}
           {!drawn && <Thumbnail day={date} />}
           <div
             ref={surfaceRef}

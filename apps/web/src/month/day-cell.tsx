@@ -5,16 +5,16 @@ import { cn } from "@calendar-canvas/ui/lib/utils";
 
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, parseDay } from "@/lib/date";
+import { rectsIntersect } from "@/month/layout";
 import { Thumbnail } from "@/thumbnails/thumbnail";
 
 export const dayLayoutId = (day: string) => `day-${day}`;
 
-/** Whether the Day's cell is mounted and inside the viewport, so a shared layout animation can start from it. */
+/** Whether the Day's cell is mounted and visible in the month list, not scrolled out or clipped by its edges, so a shared layout animation can start from it. */
 export function isDayCellOnScreen(day: string): boolean {
   const cell = document.querySelector(`[data-day-cell="${day}"]`);
-  if (!cell) return false;
-  const { top, bottom, left, right } = cell.getBoundingClientRect();
-  return bottom > 0 && top < window.innerHeight && right > 0 && left < window.innerWidth;
+  const scroller = cell?.closest("[data-month-scroll]");
+  return !!cell && !!scroller && rectsIntersect(cell.getBoundingClientRect(), scroller.getBoundingClientRect());
 }
 
 export function DayCell({ day, isToday }: { day: string; isToday: boolean }) {

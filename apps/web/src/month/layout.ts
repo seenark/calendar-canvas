@@ -5,12 +5,27 @@ import { monthGrid } from "@/month/grid";
 /** Months listed on each side of the month the view opens on. */
 export const MONTH_RANGE = 600;
 
+/** Months in the list window. */
+export const WINDOW_COUNT = 2 * MONTH_RANGE + 1;
+
+/** Whether the window starting at `first` lists the month at `index`. When it does not, the window is rebased. */
+export function windowContains(first: number, index: number): boolean {
+  return index >= first && index < first + WINDOW_COUNT;
+}
+
 /** First month index of the list window centred on `center`, kept inside the supported years. */
 export function windowStart(center: number): number {
   return Math.min(
     Math.max(center - MONTH_RANGE, MIN_MONTH_INDEX),
     MAX_MONTH_INDEX - 2 * MONTH_RANGE,
   );
+}
+
+type Rect = { top: number; bottom: number; left: number; right: number };
+
+/** Whether two rects share any area. Rects that only touch an edge do not intersect. */
+export function rectsIntersect(a: Rect, b: Rect): boolean {
+  return a.bottom > b.top && a.top < b.bottom && a.right > b.left && a.left < b.right;
 }
 
 export const HEADING_HEIGHT = 64;

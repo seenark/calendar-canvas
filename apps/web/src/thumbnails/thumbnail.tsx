@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { dayStore, type DaySnapshot } from "@/sync/day-store";
 
@@ -29,6 +29,25 @@ export function Thumbnail({ day }: { day: string }) {
   );
   if (strokes.length === 0) return null;
   return <ThumbnailCanvas day={day} revision={revision} strokes={strokes} />;
+}
+
+/**
+ * Paper-sized stand-in for a Day's thumbnail that needs no worker render: copies the bitmap its Day cell
+ * already shows and lets CSS stretch it. Draws nothing when the cell has no rendered thumbnail.
+ */
+export function CellThumbnailCopy({ day }: { day: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useLayoutEffect(() => {
+    const source = document.querySelector<HTMLCanvasElement>(
+      `[data-day-cell="${day}"] [data-slot="thumbnail"]`,
+    );
+    if (!source || source.width === 0 || source.height === 0) return;
+    const canvas = ref.current!;
+    canvas.width = source.width;
+    canvas.height = source.height;
+    canvas.getContext("2d")!.drawImage(source, 0, 0);
+  }, [day]);
+  return <canvas ref={ref} className="pointer-events-none absolute inset-0 size-full" />;
 }
 
 function ThumbnailCanvas({

@@ -7,10 +7,16 @@ import { useToday } from "@/lib/use-today";
 import { useMonths } from "@/sync/queries";
 
 import { rememberMonth } from "./last-month";
-import { HEADING_HEIGHT, MONTH_RANGE, monthItemHeight, windowStart } from "./layout";
+import {
+  HEADING_HEIGHT,
+  monthItemHeight,
+  WINDOW_COUNT,
+  windowContains,
+  windowStart,
+} from "./layout";
 import { MonthItem } from "./month-item";
 
-const COUNT = 2 * MONTH_RANGE + 1;
+const COUNT = WINDOW_COUNT;
 const URL_DEBOUNCE_MS = 300;
 
 /**
@@ -88,7 +94,7 @@ export function MonthList({
     visibleMonth.current = routeMonth;
     window.clearTimeout(urlTimer.current);
     const target = monthIndex(routeMonth);
-    if (target < first || target >= first + COUNT) setFirst(windowStart(target));
+    if (!windowContains(first, target)) setFirst(windowStart(target));
     else virtualizer.scrollToIndex(indexOf(routeMonth), { align: "start" });
   }, [routeMonth]);
 
@@ -109,7 +115,12 @@ export function MonthList({
   };
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+    <div
+      ref={scrollRef}
+      data-month-scroll
+      onScroll={onScroll}
+      className="min-h-0 flex-1 overflow-y-auto"
+    >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {width > 0 &&
           virtualizer.getVirtualItems().map((item) => (
