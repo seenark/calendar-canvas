@@ -58,6 +58,3 @@ dev-dist
 .dev.vars*
 
 .open-next
-
-!.env.schema
-/src/env.ts
