@@ -24,20 +24,24 @@ export const monthKey = (yearMonth: string) => ["month", yearMonth] as const;
 export function decodeMonth({ strokes }: MonthResponse): MonthStrokes {
   const days: MonthStrokes = {};
   for (const w of strokes) {
-    const { points, hasPressure } = decodePoints(base64ToBytes(w.points));
-    (days[w.day] ??= []).push({
-      id: w.id,
-      day: w.day,
-      kind: w.kind,
-      color: w.color,
-      size: w.size,
-      points,
-      hasPressure,
-      bbox: w.bbox,
-      createdAt: w.createdAt,
-      seq: w.seq,
-      receivedAt: w.receivedAt,
-    });
+    try {
+      const { points, hasPressure } = decodePoints(base64ToBytes(w.points));
+      (days[w.day] ??= []).push({
+        id: w.id,
+        day: w.day,
+        kind: w.kind,
+        color: w.color,
+        size: w.size,
+        points,
+        hasPressure,
+        bbox: w.bbox,
+        createdAt: w.createdAt,
+        seq: w.seq,
+        receivedAt: w.receivedAt,
+      });
+    } catch (error) {
+      console.warn(`Skipping undecodable Stroke ${w.id}`, error);
+    }
   }
   for (const list of Object.values(days)) list.sort((a, b) => a.seq - b.seq);
   return days;
