@@ -12,8 +12,8 @@ RETURNING *;
 SELECT * FROM users WHERE id = ?;
 
 -- name: CreateSession :exec
-INSERT INTO sessions (token_hash, user_id, role, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO sessions (token_hash, user_id, role, created_at, expires_at, admin_fingerprint)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: GetSession :one
 SELECT * FROM sessions WHERE token_hash = ? AND expires_at > ?;
@@ -26,6 +26,9 @@ DELETE FROM sessions WHERE token_hash = ?;
 
 -- name: PurgeExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at < ?;
+
+-- name: DeleteAdminSessionsExceptFingerprint :exec
+DELETE FROM sessions WHERE role = 'admin' AND (admin_fingerprint IS NULL OR admin_fingerprint <> ?);
 
 -- name: ListUsers :many
 SELECT * FROM users ORDER BY created_at, id;

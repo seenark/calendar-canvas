@@ -21,8 +21,8 @@ import (
 	"github.com/seenark/calendar-canvas/apps/server/internal/api"
 	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
 	"github.com/seenark/calendar-canvas/apps/server/internal/config"
-	"github.com/seenark/calendar-canvas/apps/server/internal/purge"
 	"github.com/seenark/calendar-canvas/apps/server/internal/passhash"
+	"github.com/seenark/calendar-canvas/apps/server/internal/purge"
 	"github.com/seenark/calendar-canvas/apps/server/internal/static"
 	"github.com/seenark/calendar-canvas/apps/server/internal/store"
 )

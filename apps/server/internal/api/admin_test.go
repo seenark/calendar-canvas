@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
+	"github.com/seenark/calendar-canvas/apps/server/internal/config"
 	"github.com/seenark/calendar-canvas/apps/server/internal/passhash"
 	"github.com/seenark/calendar-canvas/apps/server/internal/store"
 )
@@ -124,6 +126,41 @@ func TestAdminLoginThrottleFallsBackToRemoteAddress(t *testing.T) {
 		e.adminLogin("", adminUsername, "nope").Body.Close()
 	}
 	assertEnvelope(t, e.adminLogin("", adminUsername, adminPassword), http.StatusTooManyRequests, "rate_limited")
+}
+
+func TestAdminLoginThrottleSharesOneBucketPerIPv6Prefix(t *testing.T) {
+	e := newEnv(t, "you@gmail.com", "")
+	for i := range 5 {
+		e.adminLogin(fmt.Sprintf("2001:db8:1:2::%x", i+1), adminUsername, "nope").Body.Close()
+	}
+	assertEnvelope(t, e.adminLogin("2001:db8:1:2:ffff:ffff:ffff:ffff", adminUsername, adminPassword), http.StatusTooManyRequests, "rate_limited")
+
+	resp := e.adminLogin("2001:db8:1:3::1", adminUsername, adminPassword)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		t.Errorf("another /64 was throttled: status %d", resp.StatusCode)
+	}
+}
+
+func TestClientIPNormalizesTheLimiterKey(t *testing.T) {
+	for _, tc := range []struct{ header, remote, want string }{
+		{"203.0.113.7", "10.0.0.1:1", "203.0.113.7"},
+		{"::ffff:203.0.113.7", "10.0.0.1:1", "203.0.113.7"},
+		{"2001:db8:1:2:aaaa:bbbb:cccc:dddd", "10.0.0.1:1", "2001:db8:1:2::/64"},
+		{"fe80::1%eth0", "10.0.0.1:1", "fe80::/64"},
+		{"not-an-ip", "10.0.0.1:1", "10.0.0.1"},
+		{"", "[2001:db8:9:9::5]:1", "2001:db8:9:9::/64"},
+		{"", "unix", "unix"},
+	} {
+		r := httptest.NewRequest(http.MethodPost, "/", nil)
+		r.RemoteAddr = tc.remote
+		if tc.header != "" {
+			r.Header.Set(clientIPHeader, tc.header)
+		}
+		if got := clientIP(r); got != tc.want {
+			t.Errorf("clientIP(header %q, remote %q) = %q, want %q", tc.header, tc.remote, got, tc.want)
+		}
+	}
 }
 
 func TestSuccessfulAdminLoginsCountAgainstTheLimit(t *testing.T) {
@@ -328,6 +365,68 @@ func TestUserNoLongerAllowedIsSignedOut(t *testing.T) {
 	assertEnvelope(t, e.request(http.MethodGet, e.base+"/api/me", nil, map[string]string{"Cookie": cookie}), http.StatusUnauthorized, "unauthorized")
 	if _, err := e.q.GetSession(ctx, store.GetSessionParams{TokenHash: hash[:]}); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("session row survived: %v", err)
+	}
+}
+
+func (e *env) newService(hash string) *auth.Service {
+	e.t.Helper()
+	e.t.Setenv("ADMIN_PASSWORD_HASH", hash)
+	cfg, err := config.Load()
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	svc, err := auth.New(context.Background(), cfg, e.issuer.URL, e.issuer.endpoint(), e.q)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return svc
+}
+
+func TestRestartWithAdminSignInDisabledEndsAdminSessions(t *testing.T) {
+	e := newEnv(t, "you@gmail.com", "")
+	e.signInAdmin()
+	hash := e.sessionHash()
+
+	e.newService("")
+	if _, err := e.q.GetSession(context.Background(), store.GetSessionParams{TokenHash: hash}); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("Admin session survived a restart with Admin sign-in disabled: %v", err)
+	}
+}
+
+func TestAdminSessionIsSignedOutWhenAdminDisabledAtRequestTime(t *testing.T) {
+	e := newEnvWith(t, "you@gmail.com", "", map[string]string{"ADMIN_USERNAME": "", "ADMIN_PASSWORD_HASH": ""})
+	ctx := context.Background()
+	token := make([]byte, 32)
+	hash := sha256.Sum256(token)
+	now := time.Now().UnixMilli()
+	if err := e.q.CreateSession(ctx, store.CreateSessionParams{TokenHash: hash[:], Role: auth.RoleAdmin, CreatedAt: now, ExpiresAt: now + 3_600_000}); err != nil {
+		t.Fatal(err)
+	}
+
+	cookie := auth.SessionCookie + "=" + base64.RawURLEncoding.EncodeToString(token)
+	assertEnvelope(t, e.request(http.MethodGet, e.base+"/api/admin/users", nil, map[string]string{"Cookie": cookie}), http.StatusUnauthorized, "unauthorized")
+	if _, err := e.q.GetSession(ctx, store.GetSessionParams{TokenHash: hash[:]}); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("session row survived: %v", err)
+	}
+}
+
+func TestRotatingTheAdminPasswordHashEndsOldAdminSessions(t *testing.T) {
+	e := newEnv(t, "you@gmail.com", "")
+	e.signInAdmin()
+	hash := e.sessionHash()
+
+	e.newService(testAdminHash())
+	if _, err := e.q.GetSession(context.Background(), store.GetSessionParams{TokenHash: hash}); err != nil {
+		t.Fatalf("restart with the same hash ended the session: %v", err)
+	}
+
+	rotated, err := passhash.Generate("another password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.newService(rotated)
+	if _, err := e.q.GetSession(context.Background(), store.GetSessionParams{TokenHash: hash}); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("Admin session survived a rotated hash: %v", err)
 	}
 }
 

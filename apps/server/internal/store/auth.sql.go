@@ -10,16 +10,17 @@ import (
 )
 
 const createSession = `-- name: CreateSession :exec
-INSERT INTO sessions (token_hash, user_id, role, created_at, expires_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO sessions (token_hash, user_id, role, created_at, expires_at, admin_fingerprint)
+VALUES (?, ?, ?, ?, ?, ?)
 `
 
 type CreateSessionParams struct {
-	TokenHash []byte
-	UserID    *string
-	Role      string
-	CreatedAt int64
-	ExpiresAt int64
+	TokenHash        []byte
+	UserID           *string
+	Role             string
+	CreatedAt        int64
+	ExpiresAt        int64
+	AdminFingerprint *string
 }
 
 func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) error {
@@ -29,7 +30,17 @@ func (q *Queries) CreateSession(ctx context.Context, arg CreateSessionParams) er
 		arg.Role,
 		arg.CreatedAt,
 		arg.ExpiresAt,
+		arg.AdminFingerprint,
 	)
+	return err
+}
+
+const deleteAdminSessionsExceptFingerprint = `-- name: DeleteAdminSessionsExceptFingerprint :exec
+DELETE FROM sessions WHERE role = 'admin' AND (admin_fingerprint IS NULL OR admin_fingerprint <> ?)
+`
+
+func (q *Queries) DeleteAdminSessionsExceptFingerprint(ctx context.Context, adminFingerprint *string) error {
+	_, err := q.db.ExecContext(ctx, deleteAdminSessionsExceptFingerprint, adminFingerprint)
 	return err
 }
 
@@ -69,7 +80,7 @@ func (q *Queries) ExtendSession(ctx context.Context, arg ExtendSessionParams) er
 }
 
 const getSession = `-- name: GetSession :one
-SELECT token_hash, user_id, role, created_at, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?
+SELECT token_hash, user_id, role, created_at, expires_at, admin_fingerprint FROM sessions WHERE token_hash = ? AND expires_at > ?
 `
 
 type GetSessionParams struct {
@@ -86,6 +97,7 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 		&i.Role,
 		&i.CreatedAt,
 		&i.ExpiresAt,
+		&i.AdminFingerprint,
 	)
 	return i, err
 }
