@@ -39,7 +39,11 @@ describe("composeDay", () => {
   });
 
   it("drops a pending add that a later pending delete removed, and restores it in its add position", () => {
-    const add = (id: string, localSeq: number): PendingOp => ({ op: "add", stroke: stroke(id), localSeq });
+    const add = (id: string, localSeq: number): PendingOp => ({
+      op: "add",
+      stroke: stroke(id),
+      localSeq,
+    });
     const del: PendingOp = { op: "delete", id: "p1", localSeq: 3 };
     expect(ids(composeDay([], [add("p1", 1), add("p2", 2), del]))).toEqual(["p2"]);
     const restore: PendingOp = { op: "restore", id: "p1", localSeq: 4 };

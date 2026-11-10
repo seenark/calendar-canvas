@@ -23,8 +23,14 @@ function DrawingPage() {
   const router = useRouter();
   const paperRef = useRef<HTMLDivElement>(null);
   const [paperWidth, setPaperWidth] = useState(0);
-  const canUndo = useSyncExternalStore(dayStore.subscribe, () => dayStore.getSnapshot(date).canUndo);
-  const canRedo = useSyncExternalStore(dayStore.subscribe, () => dayStore.getSnapshot(date).canRedo);
+  const canUndo = useSyncExternalStore(
+    dayStore.subscribe,
+    () => dayStore.getSnapshot(date).canUndo,
+  );
+  const canRedo = useSyncExternalStore(
+    dayStore.subscribe,
+    () => dayStore.getSnapshot(date).canRedo,
+  );
 
   useEffect(() => {
     const store = getDefaultStore();

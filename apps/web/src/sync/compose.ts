@@ -28,6 +28,7 @@ export function composeDay(
   base.sort((a, b) => a.seq - b.seq);
 
   const picture: Stroke[] = base.filter((s) => last.get(s.id) !== "delete");
-  for (const p of ops) if (p.op === "add" && last.get(p.stroke.id) !== "delete") picture.push(p.stroke);
+  for (const p of ops)
+    if (p.op === "add" && last.get(p.stroke.id) !== "delete") picture.push(p.stroke);
   return picture;
 }
