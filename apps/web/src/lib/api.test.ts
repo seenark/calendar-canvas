@@ -13,7 +13,10 @@ function stubFetch(res: Response) {
 describe("api", () => {
   it("throws an ApiError carrying the server's error envelope", async () => {
     stubFetch(
-      Response.json({ error: { code: "unauthorized", message: "sign in required" } }, { status: 401 }),
+      Response.json(
+        { error: { code: "unauthorized", message: "sign in required" } },
+        { status: 401 },
+      ),
     );
     const err = await api("/api/me").catch((e) => e);
     expect(err).toBeInstanceOf(ApiError);
