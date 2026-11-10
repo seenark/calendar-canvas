@@ -23,3 +23,6 @@ UPDATE sessions SET expires_at = ? WHERE token_hash = ?;
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE token_hash = ?;
+
+-- name: PurgeExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at < ?;

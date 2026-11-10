@@ -382,4 +382,23 @@ func TestLimitsAreEnforcedWithTheErrorEnvelope(t *testing.T) {
 			t.Errorf("200 ops answered %d results", len(got))
 		}
 	})
+
+	t.Run("three-byte coordinates fill the per-point upper bound", func(t *testing.T) {
+		// Deltas of ±65535 are 3-byte zigzag varints, so every point takes 6 bytes.
+		b := binary.AppendUvarint([]byte{1, 0}, maxStrokePoints)
+		for i := range maxStrokePoints {
+			d := int64(65535)
+			if i%2 == 1 {
+				d = -d
+			}
+			b = binary.AppendVarint(binary.AppendVarint(b, d), d)
+		}
+		if want := 2 + 2 + maxStrokePoints*maxPointBytes; len(b) != want {
+			t.Fatalf("fixture is %d bytes, want %d", len(b), want)
+		}
+		stroke := with(func(s *StrokeInput) { s.Points = b64(b) })
+		if got := a.mustSend(stroke); got[0].Seq == 0 {
+			t.Errorf("3-byte Stroke result = %+v", got)
+		}
+	})
 }

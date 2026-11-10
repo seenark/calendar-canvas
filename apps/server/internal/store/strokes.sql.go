@@ -51,16 +51,17 @@ func (q *Queries) AddStroke(ctx context.Context, arg AddStrokeParams) error {
 }
 
 const deleteStroke = `-- name: DeleteStroke :exec
-UPDATE strokes SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL
+UPDATE strokes SET deleted_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL
 `
 
 type DeleteStrokeParams struct {
 	DeletedAt *int64
 	ID        string
+	UserID    string
 }
 
 func (q *Queries) DeleteStroke(ctx context.Context, arg DeleteStrokeParams) error {
-	_, err := q.db.ExecContext(ctx, deleteStroke, arg.DeletedAt, arg.ID)
+	_, err := q.db.ExecContext(ctx, deleteStroke, arg.DeletedAt, arg.ID, arg.UserID)
 	return err
 }
 
@@ -131,11 +132,54 @@ func (q *Queries) ListStrokesBetweenDays(ctx context.Context, arg ListStrokesBet
 	return items, nil
 }
 
-const restoreStroke = `-- name: RestoreStroke :exec
-UPDATE strokes SET deleted_at = NULL WHERE id = ?
+const pruneDayStrokes = `-- name: PruneDayStrokes :execrows
+UPDATE strokes SET deleted_at = ?1
+WHERE user_id = ?2 AND day = ?3 AND deleted_at IS NULL
+  AND id IN (SELECT value FROM json_each(CAST(?4 AS TEXT)))
 `
 
-func (q *Queries) RestoreStroke(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, restoreStroke, id)
+type PruneDayStrokesParams struct {
+	DeletedAt *int64
+	UserID    string
+	Day       string
+	Ids       string
+}
+
+func (q *Queries) PruneDayStrokes(ctx context.Context, arg PruneDayStrokesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pruneDayStrokes,
+		arg.DeletedAt,
+		arg.UserID,
+		arg.Day,
+		arg.Ids,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const purgeTombstones = `-- name: PurgeTombstones :execrows
+DELETE FROM strokes WHERE deleted_at IS NOT NULL AND deleted_at < ?
+`
+
+func (q *Queries) PurgeTombstones(ctx context.Context, deletedAt *int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, purgeTombstones, deletedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const restoreStroke = `-- name: RestoreStroke :exec
+UPDATE strokes SET deleted_at = NULL WHERE id = ? AND user_id = ?
+`
+
+type RestoreStrokeParams struct {
+	ID     string
+	UserID string
+}
+
+func (q *Queries) RestoreStroke(ctx context.Context, arg RestoreStrokeParams) error {
+	_, err := q.db.ExecContext(ctx, restoreStroke, arg.ID, arg.UserID)
 	return err
 }

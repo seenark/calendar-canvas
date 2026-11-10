@@ -18,6 +18,7 @@ import (
 	"github.com/seenark/calendar-canvas/apps/server/internal/api"
 	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
 	"github.com/seenark/calendar-canvas/apps/server/internal/config"
+	"github.com/seenark/calendar-canvas/apps/server/internal/purge"
 	"github.com/seenark/calendar-canvas/apps/server/internal/static"
 	"github.com/seenark/calendar-canvas/apps/server/internal/store"
 )
@@ -71,6 +72,8 @@ func serve(cfg config.Config) error {
 	if err != nil {
 		return err
 	}
+
+	go purge.New(store.New(conn)).Run(ctx)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
