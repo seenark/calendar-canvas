@@ -43,7 +43,9 @@ function setup(me: () => Response) {
 
 describe("resumeIfSignedIn", () => {
   it("keeps needsAuth and sends nothing while /api/me answers 401", async () => {
-    const { queryClient, store, posts } = setup(() => json({ error: { code: "unauthorized" } }, 401));
+    const { queryClient, store, posts } = setup(() =>
+      json({ error: { code: "unauthorized" } }, 401),
+    );
     atoms.set(needsAuthAtom, true);
     await resumeIfSignedIn(queryClient, store);
     expect(atoms.get(needsAuthAtom)).toBe(true);
