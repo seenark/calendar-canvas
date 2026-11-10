@@ -27,14 +27,10 @@ type Active = {
   points: InkPoint[];
   predicted: InkPoint[];
   rect: DOMRect;
-  /** Eraser only: how many of `points` are already erased from the static canvas. */
-  erasedTo: number;
 };
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
-/** Eraser points re-stamped before the newest ones, so the smoothed outline of each slice overlaps the last. */
-const ERASE_OVERLAP = 3;
 const RING_COLOR = "#4c4f69";
 
 /** Plain TypeScript, no React. Layers above the container's CSS background: static canvas (committed Strokes), live canvas (the Stroke in progress). */
@@ -45,6 +41,9 @@ export class DrawingEngine {
   private readonly onCommit: (stroke: Stroke) => void;
   private readonly staticCanvas = document.createElement("canvas");
   private readonly liveCanvas = document.createElement("canvas");
+  /** The static canvas as it was before the active Eraser began. Every Eraser frame is this plus one full outline. */
+  private readonly snapshot = document.createElement("canvas");
+  private snapshotValid = false;
   private readonly staticCtx: CanvasRenderingContext2D;
   private readonly liveCtx: CanvasRenderingContext2D;
   private readonly observer: ResizeObserver;
@@ -139,7 +138,6 @@ export class DrawingEngine {
       points: [],
       predicted: [],
       rect: this.liveCanvas.getBoundingClientRect(),
-      erasedTo: 0,
     };
     this.record(e);
     this.scheduleFrame();
@@ -206,7 +204,7 @@ export class DrawingEngine {
     this.clear(this.liveCtx);
     if (!a) return;
     if (a.kind === "eraser") {
-      this.eraseNewPoints(a);
+      this.eraseOverSnapshot(strokePath(a.points, a.size, "eraser", false, false));
       this.drawRing(a);
       return;
     }
@@ -234,7 +232,11 @@ export class DrawingEngine {
 
   private commit(a: Active): void {
     const stroke = this.finalize(a);
-    if (!this.staticDirty) this.fill(this.staticCtx, this.outline(stroke), stroke.color);
+    if (this.staticDirty) return;
+    if (stroke.kind === "eraser") {
+      this.eraseOverSnapshot(this.outline(stroke));
+      this.snapshotValid = false;
+    } else this.fill(this.staticCtx, this.outline(stroke), stroke.color);
   }
 
   private outline(stroke: Stroke): Path2D {
@@ -247,17 +249,34 @@ export class DrawingEngine {
   }
 
   private redraw(): void {
+    this.snapshotValid = false;
     this.clear(this.staticCtx);
     for (const s of this.strokes) this.fill(this.staticCtx, this.outline(s), s.color);
-    if (this.active?.kind === "eraser") this.active.erasedTo = 0;
   }
 
-  /** Erases only the points added since the last frame, straight onto the static canvas. */
-  private eraseNewPoints(a: Active): void {
-    if (a.points.length === a.erasedTo) return;
-    const slice = a.points.slice(Math.max(0, a.erasedTo - ERASE_OVERLAP));
-    this.fill(this.staticCtx, strokePath(slice, a.size, "eraser", false, false), null);
-    a.erasedTo = a.points.length;
+  /**
+   * Restores the pre-Eraser pixels and erases one whole outline from them, so the static canvas is always
+   * "earlier Strokes, then this outline", the same composition `redraw` produces for a committed Eraser.
+   */
+  private eraseOverSnapshot(outline: Path2D): void {
+    if (!this.snapshotValid) this.takeSnapshot();
+    const ctx = this.staticCtx;
+    this.clear(ctx);
+    ctx.globalCompositeOperation = "source-over";
+    ctx.drawImage(this.snapshot, 0, 0);
+    this.fill(ctx, outline, null);
+  }
+
+  private takeSnapshot(): void {
+    const { width, height } = this.staticCanvas;
+    if (this.snapshot.width !== width || this.snapshot.height !== height) {
+      this.snapshot.width = width;
+      this.snapshot.height = height;
+    }
+    const ctx = this.snapshot.getContext("2d")!;
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(this.staticCanvas, 0, 0);
+    this.snapshotValid = true;
   }
 
   private drawRing(a: Active): void {
