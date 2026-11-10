@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { toast } from "sonner";
 
@@ -9,17 +9,19 @@ import { decideUpdate, whenActivated } from "./update-policy";
 const TOAST_ID = "app-update";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 
-function useIsDrawing(): boolean {
-  const [drawing, setDrawing] = useState(false);
+/**
+ * Counts active pointers in a ref, never in React state, so a Stroke causes no commit. `rerender` runs only
+ * when the last pointer lifts while a requested reload is deferred (`deferred.current`), to re-evaluate it.
+ */
+function usePointersDown(deferred: { current: boolean }, rerender: () => void) {
+  const down = useRef(new Set<number>());
   useEffect(() => {
-    const down = new Set<number>();
-    const track = (add: boolean) => (e: PointerEvent) => {
-      if (add) down.add(e.pointerId);
-      else down.delete(e.pointerId);
-      setDrawing(down.size > 0);
+    const pointers = down.current;
+    const onDown = (e: PointerEvent) => void pointers.add(e.pointerId);
+    const onUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size === 0 && deferred.current) rerender();
     };
-    const onDown = track(true);
-    const onUp = track(false);
     document.addEventListener("pointerdown", onDown, true);
     document.addEventListener("pointerup", onUp, true);
     document.addEventListener("pointercancel", onUp, true);
@@ -28,8 +30,8 @@ function useIsDrawing(): boolean {
       document.removeEventListener("pointerup", onUp, true);
       document.removeEventListener("pointercancel", onUp, true);
     };
-  }, []);
-  return drawing;
+  }, [deferred, rerender]);
+  return down;
 }
 
 /**
@@ -50,11 +52,20 @@ export function UpdatePrompt() {
     onNeedReload: () => {},
   });
   const pending = useSyncExternalStore(dayStore.subscribe, dayStore.pendingCount);
-  const drawing = useIsDrawing();
+  const deferred = useRef(false);
+  const [tick, rerender] = useReducer((n: number) => n + 1, 0);
+  const down = usePointersDown(deferred, rerender);
   const [requested, setRequested] = useState(false);
-  const action = decideUpdate({ needRefresh, requested, pending, drawing, activated });
+  const action = decideUpdate({
+    needRefresh,
+    requested,
+    pending,
+    drawing: down.current.size > 0,
+    activated,
+  });
 
   useEffect(() => {
+    deferred.current = action === "wait";
     if (action === "prompt") {
       toast.info("อัปเดตพร้อมแล้ว", {
         id: TOAST_ID,
@@ -85,17 +96,30 @@ export function UpdatePrompt() {
         // sonner removes a dismissed toast by id 200ms later, so re-showing the prompt sooner would be removed too
         onDismiss: () => setTimeout(() => setRequested(false), 250),
       });
-    } else if (action === "activate") {
-      const r = registration.current;
-      const target = r?.waiting ?? r?.installing ?? r?.active;
-      void updateServiceWorker(true);
-      if (target)
-        whenActivated(target).then(
-          () => setActivated(true),
-          () => setRequested(false),
-        );
-    } else if (action === "reload") window.location.reload();
-  }, [action, updateServiceWorker]);
+    }
+  }, [action]);
+
+  useEffect(() => {
+    if (action !== "activate" && action !== "reload") return;
+    // the render-time snapshot may predate a pointerdown or a new Pending op; the pointer wake-up or the store re-renders when it clears
+    if (down.current.size > 0 || dayStore.pendingCount() > 0) {
+      deferred.current = true;
+      return;
+    }
+    deferred.current = false;
+    if (action === "reload") {
+      window.location.reload();
+      return;
+    }
+    const r = registration.current;
+    const target = r?.waiting ?? r?.installing ?? r?.active;
+    void updateServiceWorker(true);
+    if (target)
+      whenActivated(target).then(
+        () => setActivated(true),
+        () => setRequested(false),
+      );
+  }, [action, tick, down, updateServiceWorker]);
 
   useEffect(() => {
     const check = () => void registration.current?.update().catch(() => {});
