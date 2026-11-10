@@ -89,7 +89,11 @@ export function UpdatePrompt() {
       const r = registration.current;
       const target = r?.waiting ?? r?.installing ?? r?.active;
       void updateServiceWorker(true);
-      if (target) whenActivated(target).then(() => setActivated(true), () => setRequested(false));
+      if (target)
+        whenActivated(target).then(
+          () => setActivated(true),
+          () => setRequested(false),
+        );
     } else if (action === "reload") window.location.reload();
   }, [action, updateServiceWorker]);
 
