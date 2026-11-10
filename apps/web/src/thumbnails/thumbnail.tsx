@@ -25,7 +25,9 @@ function ThumbnailCanvas({
     const canvas = ref.current!;
     const observer = new ResizeObserver(([entry]) => {
       const { width, height } = entry!.contentRect;
-      setSize((prev) => (prev?.width === width && prev.height === height ? prev : { width, height }));
+      setSize((prev) =>
+        prev?.width === width && prev.height === height ? prev : { width, height },
+      );
     });
     observer.observe(canvas);
     return () => observer.disconnect();
