@@ -112,15 +112,39 @@ describe("simplify", () => {
 });
 
 describe("fitToLimit", () => {
-  it("fits a pressure-rich collinear Stroke under MAX_STROKE_POINTS, keeping both ends", () => {
+  it("fits a pressure-rich collinear Stroke under MAX_STROKE_POINTS, keeping both ends, in under 500 ms", () => {
     const points = Array.from({ length: 10_000 }, (_, i) => ({
       x: i / 9_999,
       y: 0.5,
       pressure: i % 2 ? 0.8 : 0.2,
     }));
+    const start = performance.now();
     const out = fitToLimit(points, true);
+    expect(performance.now() - start).toBeLessThan(500);
     expect(out.length).toBeLessThanOrEqual(MAX_STROKE_POINTS);
     expect(out[0]).toBe(points[0]);
     expect(out.at(-1)).toBe(points.at(-1));
+  });
+
+  it("fits a 4,000-point curved pressure Stroke in under 50 ms", () => {
+    const points = Array.from({ length: 4_000 }, (_, i) => {
+      const t = i / 3_999;
+      return {
+        x: 0.1 + 0.8 * t,
+        y: 0.5 + 0.3 * Math.sin(t * 6),
+        pressure: 0.5 + 0.3 * Math.sin(t * 9),
+      };
+    });
+    const start = performance.now();
+    const out = fitToLimit(points, true);
+    expect(performance.now() - start).toBeLessThan(50);
+    expect(out.length).toBeLessThanOrEqual(MAX_STROKE_POINTS);
+    expect(out[0]).toBe(points[0]);
+    expect(out.at(-1)).toBe(points.at(-1));
+  });
+
+  it("matches simplify at the default epsilon when the Stroke already fits", () => {
+    const points = noisyCurve(500);
+    expect(fitToLimit(points, true)).toEqual(simplify(points, undefined, true));
   });
 });
