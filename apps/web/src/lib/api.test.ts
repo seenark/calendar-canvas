@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { QueryClient } from "@tanstack/react-query";
 
-import { ApiError, api, fetchMe, meQuery } from "./api";
+import { getDefaultStore } from "jotai/vanilla";
+
+import { needsAuthAtom } from "@/state/auth";
+
+import { ApiError, api, fetchMe, fetchMeOrStay, meQuery } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -73,5 +77,27 @@ describe("fetchMe", () => {
     stubFetch(Response.json({ error: { code: "unauthorized", message: "x" } }, { status: 401 }));
     expect(await fetchMe(queryClient)).toBeNull();
     expect(queryClient.getQueryData(meQuery.queryKey)).toBeUndefined();
+  });
+});
+
+describe("fetchMeOrStay", () => {
+  const unauthorized = () =>
+    stubFetch(Response.json({ error: { code: "unauthorized", message: "x" } }, { status: 401 }));
+  afterEach(() => getDefaultStore().set(needsAuthAtom, false));
+
+  it("keeps the cached identity and sets needsAuth on a 401", async () => {
+    const queryClient = new QueryClient();
+    const me = { user: null, role: "user" } as const;
+    queryClient.setQueryData(meQuery.queryKey, me);
+    unauthorized();
+    expect(await fetchMeOrStay(queryClient)).toEqual(me);
+    expect(getDefaultStore().get(needsAuthAtom)).toBe(true);
+    expect(queryClient.getQueryData(meQuery.queryKey)).toEqual(me);
+  });
+
+  it("returns null on a 401 when no identity was ever cached", async () => {
+    unauthorized();
+    expect(await fetchMeOrStay(new QueryClient())).toBeNull();
+    expect(getDefaultStore().get(needsAuthAtom)).toBe(false);
   });
 });

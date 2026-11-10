@@ -1,3 +1,5 @@
+import { SessionExpired } from "@/sync/session-expired";
+
 import { GRID_GAP, MONTH_PADDING_X } from "./layout";
 import { MonthList } from "./month-list";
 import { ThemeToggle } from "./theme-toggle";
@@ -15,6 +17,7 @@ export function MonthView({
     <main className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-16 shrink-0 items-center justify-between px-3">
         <h1 className="text-sm font-bold">Calendar Canvas</h1>
+        <SessionExpired />
         <ThemeToggle />
       </header>
       <div

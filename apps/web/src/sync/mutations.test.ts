@@ -1,9 +1,11 @@
 import { QueryClient, hydrate } from "@tanstack/react-query";
+import { getDefaultStore } from "jotai/vanilla";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Stroke } from "@/api/types";
 import { bytesToBase64 } from "@/ink/base64";
 import { encodePoints } from "@/ink/codec";
+import { needsAuthAtom } from "@/state/auth";
 
 import { DayStore } from "./day-store";
 import type { SentOp } from "./ops";
@@ -21,7 +23,10 @@ const DAY = "2026-11-10";
 const MONTH = "2026-11";
 const stored = { flush: async () => {}, onStored: () => () => {} };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  getDefaultStore().set(needsAuthAtom, false);
+});
 
 function setup() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
@@ -242,6 +247,70 @@ describe("sending", () => {
       expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
     );
     expect(store.takeUnsent()).toHaveLength(1);
+  });
+});
+
+describe("an expired session", () => {
+  const needsAuth = () => getDefaultStore().get(needsAuthAtom);
+
+  it("sets needsAuth, never retries, and keeps each Op once in order", async () => {
+    const { queryClient, store } = setup();
+    const { posts } = server(() => respond({ strokes: [] }));
+    store.commitStroke(stroke("a"));
+    store.commitStroke(stroke("b"));
+    store.undo(DAY);
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    posts[0]!.reply(respond({ error: { code: "unauthorized" } }, 401));
+    await vi.waitFor(() => expect(needsAuth()).toBe(true));
+    const [mutation, ...others] = queryClient.getMutationCache().getAll();
+    expect(others).toEqual([]);
+    expect(mutation!.state.status).toBe("error");
+    expect(mutation!.state.failureCount).toBe(1);
+    expect(store.pendingCount()).toBe(3);
+    expect(store.takeUnsent().map((op) => op.localSeq)).toEqual([0, 1, 2]);
+  });
+
+  it("buffers new Ops without sending while needsAuth is set, then sends every Op once after sign-in", async () => {
+    const { queryClient, store } = setup();
+    const { posts } = server(() => respond({ strokes: [] }));
+    store.commitStroke(stroke("a"));
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    posts[0]!.reply(respond({ error: { code: "unauthorized" } }, 401));
+    await vi.waitFor(() => expect(needsAuth()).toBe(true));
+    store.commitStroke(stroke("b"));
+    sendOps(queryClient, store);
+    await flush();
+    expect(posts).toHaveLength(1);
+    expect(store.pendingCount()).toBe(2);
+    expect(store.getSnapshot(DAY).strokes.map((x) => x.id)).toEqual(["a", "b"]);
+
+    getDefaultStore().set(needsAuthAtom, false);
+    sendOps(queryClient, store);
+    await vi.waitFor(() => expect(posts).toHaveLength(2));
+    expect(opIds(posts[1]!)).toEqual(["a", "b"]);
+    posts[1]!.reply(
+      respond({
+        results: [
+          { id: "a", seq: 1 },
+          { id: "b", seq: 2 },
+        ],
+      }),
+    );
+    await vi.waitFor(() => expect(store.pendingCount()).toBe(0));
+    expect(posts).toHaveLength(2);
+  });
+
+  it("does not set needsAuth for another 4xx", async () => {
+    const { queryClient, store } = setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond({ error: { code: "forbidden" } }, 403)),
+    );
+    store.commitStroke(stroke("a"));
+    await vi.waitFor(() =>
+      expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
+    );
+    expect(needsAuth()).toBe(false);
   });
 });
 

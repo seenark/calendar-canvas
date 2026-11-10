@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useParams } from "@tanstack/react-ro
 import { AnimatePresence, MotionConfig, useReducedMotion } from "motion/react";
 
 import { DrawingPage } from "@/drawing/drawing-page";
-import { ApiError, fetchMe } from "@/lib/api";
+import { ApiError, fetchMeOrStay } from "@/lib/api";
 import { isDayKey, isYearMonth, monthOfDay, toDayKey } from "@/lib/date";
 import { MonthView } from "@/month/month-view";
 
@@ -14,7 +14,7 @@ const INSTANT = { duration: 0 } as const;
 
 export const Route = createFileRoute("/_calendar")({
   beforeLoad: async ({ context, location }) => {
-    const me = await fetchMe(context.queryClient).catch((err) => {
+    const me = await fetchMeOrStay(context.queryClient).catch((err) => {
       if (err instanceof ApiError) throw err;
       throw redirect({ to: "/login", search: { return: location.href, error: "offline" } });
     });

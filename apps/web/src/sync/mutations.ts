@@ -1,10 +1,12 @@
 import type { MutationOptions, QueryClient } from "@tanstack/react-query";
+import { getDefaultStore } from "jotai/vanilla";
 
 import type { Op as WireOp, OpsRequest, OpsResponse } from "@/api/types";
 import { bytesToBase64 } from "@/ink/base64";
 import { encodePoints } from "@/ink/codec";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { monthOfDay } from "@/lib/date";
+import { needsAuthAtom } from "@/state/auth";
 
 import { BATCH_LIMITS, splitBatches } from "./batches";
 import { holdBuffer } from "./buffer";
@@ -118,16 +120,21 @@ export function strokeOpsDefaults(
           .catch(() => {});
       }
     },
-    onError: (_error, { ops }) => store.release(ops),
+    onError: (error, { ops }) => {
+      store.release(ops);
+      if (error instanceof ApiError && error.status === 401)
+        getDefaultStore().set(needsAuthAtom, true);
+    },
   };
 }
 
 /**
  * Single-flight sender. A batch (at most `BATCH_LIMITS`) reads the unsent Ops when it starts. On success the next
  * batch starts at once; on failure its Ops return to the front of the unsent set and nothing is sent until the
- * next trigger.
+ * next trigger. Nothing is sent while `needsAuth` is set; the Ops stay buffered.
  */
 export function sendOps(queryClient: QueryClient, store: DayStore): void {
+  if (getDefaultStore().get(needsAuthAtom)) return;
   if (queryClient.isMutating({ mutationKey: STROKE_OPS_KEY }) > 0) return;
   const [ops = [], ...rest] = splitBatches(store.takeUnsent(), BATCH_LIMITS, toWireOp);
   store.release(rest.flat());

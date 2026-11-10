@@ -1,4 +1,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { getDefaultStore } from "jotai/vanilla";
+
+import { needsAuthAtom } from "@/state/auth";
 
 import { requestPersistentStorage } from "./storage";
 
@@ -28,6 +31,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }
+
+/** Where the Google sign-in starts and where it sends the User back to. */
+export const signInUrl = (returnPath: string): string =>
+  "/api/auth/google/start?return=" + encodeURIComponent(returnPath);
 
 export interface Me {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null } | null;
@@ -61,6 +68,19 @@ export async function fetchMe(queryClient: QueryClient): Promise<Me | null> {
     if (cached) return cached;
     throw err;
   }
+}
+
+/**
+ * `fetchMe` for the calendar: a 401 while an identity is cached keeps that identity and sets `needsAuth`, so an
+ * expired session never blocks drawing. With no cached identity it is `fetchMe`'s null.
+ */
+export async function fetchMeOrStay(queryClient: QueryClient): Promise<Me | null> {
+  const cached = queryClient.getQueryData(meQuery.queryKey);
+  const me = await fetchMe(queryClient);
+  if (me || !cached) return me;
+  queryClient.setQueryData(meQuery.queryKey, cached);
+  getDefaultStore().set(needsAuthAtom, true);
+  return cached;
 }
 
 export interface AdminUser {
