@@ -80,7 +80,7 @@ func newEnv(t *testing.T, allowed, baseURL string) *env {
 		issuer:  issuer,
 		q:       q,
 		base:    cfg.AppBaseURL,
-		handler: NewRouter(testSPA, cfg, svc),
+		handler: NewRouter(testSPA, cfg, svc, conn),
 		client: &http.Client{
 			Jar:           jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },

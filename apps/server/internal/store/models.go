@@ -12,6 +12,24 @@ type Session struct {
 	ExpiresAt int64
 }
 
+type Stroke struct {
+	Seq        int64
+	ID         string
+	UserID     string
+	Day        string
+	Kind       string
+	Color      *string
+	Size       float64
+	Points     []byte
+	MinX       float64
+	MinY       float64
+	MaxX       float64
+	MaxY       float64
+	CreatedAt  int64
+	ReceivedAt int64
+	DeletedAt  *int64
+}
+
 type User struct {
 	ID          string
 	GoogleSub   string
