@@ -14,7 +14,7 @@ export interface Stroke {
   id: string;
   seq: number /* int64 */;
   day: string;
-  kind: 'pen' | 'eraser';
+  kind: "pen" | "eraser";
   color: string | null;
   size: number /* float64 */;
   points: string;
@@ -31,7 +31,7 @@ export interface MonthResponse {
 export interface StrokeInput {
   id: string;
   day: string;
-  kind: 'pen' | 'eraser';
+  kind: "pen" | "eraser";
   color: string | null;
   size: number /* float64 */;
   points: string;
