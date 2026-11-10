@@ -1,5 +1,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
+import { requestPersistentStorage } from "./storage";
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -33,8 +35,12 @@ export interface Me {
 }
 
 export const meQuery = queryOptions({
+  queryFn: async () => {
+    const me = await api<Me>("/api/me");
+    if (me.user) requestPersistentStorage();
+    return me;
+  },
   queryKey: ["me"],
-  queryFn: () => api<Me>("/api/me"),
   retry: false,
 });
 
