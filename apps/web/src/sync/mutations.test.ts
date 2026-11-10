@@ -25,7 +25,10 @@ afterEach(() => vi.unstubAllGlobals());
 function setup() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
   const store = new DayStore();
-  queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store));
+  queryClient.setMutationDefaults(
+    STROKE_OPS_KEY,
+    strokeOpsDefaults(queryClient, store, async () => {}),
+  );
   bindMonthsToStore(queryClient, store);
   store.subscribeOps(() => sendOps(queryClient, store));
   return { queryClient, store };
@@ -159,7 +162,10 @@ describe("sending", () => {
   it("sends a flush as consecutive batches of at most 200 Ops, in order", async () => {
     const queryClient = new QueryClient();
     const store = new DayStore();
-    queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store));
+    queryClient.setMutationDefaults(
+      STROKE_OPS_KEY,
+      strokeOpsDefaults(queryClient, store, async () => {}),
+    );
     const { posts } = server(() => respond({ strokes: [] }));
     const ids = Array.from({ length: 450 }, (_, i) => `s${i}`);
     for (const id of ids) store.commitStroke(stroke(id));
@@ -277,7 +283,7 @@ describe("restoring a session", () => {
     });
     const { posts } = server(() => respond({ strokes: [] }));
 
-    adoptRestoredStrokeOps(queryClient, store);
+    adoptRestoredStrokeOps(queryClient, store, true);
     void queryClient.resumePausedMutations();
     await flush();
     expect(posts.map(opIds)).toEqual([["a", "b"]]);
@@ -297,5 +303,32 @@ describe("restoring a session", () => {
     await flush();
     expect(posts).toHaveLength(2);
     expect(store.snapshotPending().ops).toEqual([]);
+  });
+
+  it("keeps a restored batch when the buffer could not be read, since it may be the only copy", async () => {
+    const { queryClient, store } = setup();
+    hydrate(queryClient, { mutations: [pausedMutation([add("a", 5)])], queries: [] });
+    const { posts } = server(() => respond({ strokes: [] }));
+
+    adoptRestoredStrokeOps(queryClient, store, false);
+    void queryClient.resumePausedMutations();
+    await flush();
+    expect(posts.map(opIds)).toEqual([["a"]]);
+  });
+
+  it("sends nothing after a restored batch fails, until the next trigger", async () => {
+    const { queryClient, store } = setup();
+    const [a, c] = [add("a", 5), add("c", 7)];
+    store.restore({ ops: [a, c], strokes: [] });
+    hydrate(queryClient, { mutations: [pausedMutation([a])], queries: [] });
+    const { posts } = server(() => respond({ strokes: [] }));
+
+    adoptRestoredStrokeOps(queryClient, store, true);
+    void queryClient.resumePausedMutations();
+    await flush();
+    posts[0]!.reply(respond({ error: { code: "invalid" } }, 400));
+    await flush();
+    expect(posts).toHaveLength(1);
+    expect(store.takeUnsent().map((op) => op.localSeq)).toEqual([5, 7]);
   });
 });
