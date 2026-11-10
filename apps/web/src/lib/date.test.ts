@@ -4,6 +4,7 @@ import {
   daysOfMonth,
   formatThaiDate,
   formatThaiMonth,
+  isDayKey,
   isYearMonth,
   monthIndex,
   parseDay,
@@ -50,6 +51,23 @@ describe("month helpers", () => {
     expect(isYearMonth("2026-11")).toBe(true);
     expect(isYearMonth("2026-00")).toBe(false);
     expect(isYearMonth("2026-13")).toBe(false);
+  });
+
+  it("supports years 1900 to 2199 only", () => {
+    expect(isYearMonth("1900-01")).toBe(true);
+    expect(isYearMonth("2199-12")).toBe(true);
+    expect(isYearMonth("1899-12")).toBe(false);
+    expect(isYearMonth("2200-01")).toBe(false);
+    expect(isYearMonth("0026-01")).toBe(false);
+    expect(isDayKey("2199-12-31")).toBe(true);
+    expect(isDayKey("2200-01-01")).toBe(false);
+    expect(isDayKey("0099-01-01")).toBe(false);
+    expect(isDayKey("2025-02-29")).toBe(false);
+  });
+
+  it("never reads a year below 100 as 19xx", () => {
+    expect(parseDay("0099-03-05")!.getFullYear()).toBe(99);
+    expect(daysOfMonth("0004-02").days).toHaveLength(29);
   });
 });
 

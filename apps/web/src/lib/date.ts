@@ -4,21 +4,44 @@ import { th } from "date-fns/locale/th";
 const DAY_KEY = /^(\d{4})-(\d{2})-(\d{2})$/;
 const YEAR_MONTH = /^(\d{4})-(\d{2})$/;
 
+export const MIN_YEAR = 1900;
+export const MAX_YEAR = 2199;
+export const MIN_MONTH_INDEX = MIN_YEAR * 12;
+export const MAX_MONTH_INDEX = MAX_YEAR * 12 + 11;
+
+/** `new Date(y, ...)` reads years 0 to 99 as 1900 to 1999. `setFullYear` does not. */
+function localDate(year: number, month0: number, day: number): Date {
+  const date = new Date(2000, 0, 1);
+  date.setFullYear(year, month0, day);
+  return date;
+}
+
 /** Parses a 'YYYY-MM-DD' Day key as a local date. Returns null unless it is a real calendar date. */
 export function parseDay(day: string): Date | null {
   const m = DAY_KEY.exec(day);
   if (!m) return null;
   const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const date = new Date(y, mo - 1, d);
-  date.setFullYear(y);
+  const date = localDate(y, mo - 1, d);
   return date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d
     ? date
     : null;
 }
 
+/** A real Day key in the supported years. */
+export function isDayKey(value: string): boolean {
+  const date = parseDay(value);
+  return date !== null && date.getFullYear() >= MIN_YEAR && date.getFullYear() <= MAX_YEAR;
+}
+
 export function isYearMonth(value: string): boolean {
   const m = YEAR_MONTH.exec(value);
-  return m !== null && Number(m[2]) >= 1 && Number(m[2]) <= 12;
+  return (
+    m !== null &&
+    Number(m[2]) >= 1 &&
+    Number(m[2]) <= 12 &&
+    Number(m[1]) >= MIN_YEAR &&
+    Number(m[1]) <= MAX_YEAR
+  );
 }
 
 export function toDayKey(date: Date): string {
@@ -32,12 +55,12 @@ export function monthOfDay(day: string): string {
 /** Days of a 'YYYY-MM' month in order, plus the weekday (Sunday = 0) of the first one. */
 export function daysOfMonth(yearMonth: string): { days: string[]; firstWeekday: number } {
   const [y, m] = yearMonth.split("-").map(Number) as [number, number];
-  const count = new Date(y, m, 0).getDate();
+  const count = localDate(y, m, 0).getDate();
   const days = Array.from(
     { length: count },
     (_, i) => `${yearMonth}-${String(i + 1).padStart(2, "0")}`,
   );
-  return { days, firstWeekday: new Date(y, m - 1, 1).getDay() };
+  return { days, firstWeekday: localDate(y, m - 1, 1).getDay() };
 }
 
 /** Thai weekday, day and month with the Buddhist Era year (CE + 543). */
