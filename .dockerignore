@@ -1,5 +1,6 @@
 **/node_modules
 .git
+.codegraph
 
 **/dist
 **/build
@@ -17,16 +18,10 @@
 **/.vercel
 *.log
 
-Dockerfile
-**/Dockerfile
-docker-compose.yml
-
-# Env value files stay out of COPY layers; runtime env comes from compose env_file,
-# build-time configuration uses BuildKit secrets; public values use build args
+# Env value files stay out of COPY layers; runtime env comes from compose env_file
 **/.env
 **/.env.*
 !**/.env.example
-!**/.env.schema
 
 local.db
 local.db-*
