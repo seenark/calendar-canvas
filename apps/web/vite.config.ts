@@ -20,20 +20,24 @@ export default defineConfig({
     }),
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,webmanifest}"],
+        navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
       },
       manifest: {
         name: "Calendar Canvas",
         short_name: "Cal Canvas",
         description: "Handwritten calendar PWA",
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/",
+        scope: "/",
         theme_color: "#eff1f5",
         background_color: "#eff1f5",
       },
       pwaAssets: { disabled: false, config: true },
-      devOptions: { enabled: true },
     }),
   ],
 });

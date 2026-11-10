@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 
 import { ThemeProvider } from "@/components/theme-provider";
+import { UpdatePrompt } from "@/pwa/update-prompt";
 
 import "../index.css";
 
@@ -39,6 +40,7 @@ function RootComponent() {
           <Outlet />
         </div>
         <Toaster richColors />
+        <UpdatePrompt />
       </ThemeProvider>
     </>
   );
