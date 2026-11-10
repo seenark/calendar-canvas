@@ -20,7 +20,7 @@ let holds = 0;
 let onRelease = () => {};
 let writeNow = () => Promise.resolve();
 
-/** Resolves once every change made so far is in IndexedDB. A failed write is logged, not thrown. */
+/** Resolves once every change made so far is in IndexedDB. Rejects when that write fails. */
 export const persistNow = (): Promise<void> => writeNow();
 
 /**
@@ -47,8 +47,8 @@ export function persistBuffer(store: DayStore): () => void {
   const signatureOf = ({ ops }: PendingSnapshot) => ops.map((op) => op.localSeq).join();
   let written = store.snapshotPending();
   let queue = Promise.resolve();
-  const write = () => {
-    queue = queue.then(() => {
+  const write = (): Promise<void> => {
+    const run = queue.then(async () => {
       const now = store.snapshotPending();
       const next =
         holds === 0
@@ -60,18 +60,17 @@ export function persistBuffer(store: DayStore): () => void {
               strokes: union(written.strokes, now.strokes, (stroke) => stroke.id),
             };
       if (signatureOf(next) === signatureOf(written)) return;
+      await set(BUFFER_KEY, next);
       written = next;
-      return set(BUFFER_KEY, next).catch((error) =>
-        console.warn("Could not save the unsent Ops", error),
-      );
     });
+    queue = run.catch(() => {});
+    return run;
   };
-  onRelease = write;
-  writeNow = () => {
-    write();
-    return queue;
-  };
-  const unsubscribe = store.subscribe(write);
+  const writeInBackground = () =>
+    void write().catch((error) => console.warn("Could not save the unsent Ops", error));
+  onRelease = writeInBackground;
+  writeNow = write;
+  const unsubscribe = store.subscribe(writeInBackground);
   return () => {
     unsubscribe();
     onRelease = () => {};

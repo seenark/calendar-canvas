@@ -2,10 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const disk = vi.hoisted(() => new Map<string, unknown>());
 const slowWrite = vi.hoisted(() => ({ ms: 0 }));
+const failWrite = vi.hoisted(() => ({ on: false }));
 vi.mock("idb-keyval", () => ({
   get: async (key: string) => disk.get(key),
   set: async (key: string, value: unknown) => {
     await new Promise((resolve) => setTimeout(resolve, slowWrite.ms));
+    if (failWrite.on) throw new Error("quota");
     disk.set(key, value);
   },
 }));
@@ -18,6 +20,20 @@ describe("buffer persistence", () => {
   beforeEach(() => {
     disk.clear();
     slowWrite.ms = 0;
+    failWrite.on = false;
+  });
+
+  it("persistNow rejects when the write fails, and writes the same snapshot again once storage recovers", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const store = new DayStore();
+    persistBuffer(store);
+    failWrite.on = true;
+    store.commitStroke(stroke("a"));
+    await expect(persistNow()).rejects.toThrow("quota");
+    expect(disk.get(BUFFER_KEY)).toBeUndefined();
+    failWrite.on = false;
+    await persistNow();
+    expect(disk.get(BUFFER_KEY)).toMatchObject({ ops: [{ localSeq: 0 }] });
   });
 
   it("persistNow resolves only after the latest Ops are in storage", async () => {
