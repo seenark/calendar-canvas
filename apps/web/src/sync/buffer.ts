@@ -16,10 +16,11 @@ export async function restoreBuffer(store: DayStore): Promise<void> {
 
 /** Writes the Pending ops to IndexedDB whenever the set changes. Start it after `restoreBuffer`. Returns the stop function. */
 export function persistBuffer(store: DayStore): () => void {
-  let written = "";
+  const signatureOf = ({ ops }: PendingSnapshot) => ops.map((op) => op.localSeq).join();
+  let written = signatureOf(store.snapshotPending());
   return store.subscribe(() => {
     const snapshot = store.snapshotPending();
-    const signature = snapshot.ops.map((op) => op.localSeq).join();
+    const signature = signatureOf(snapshot);
     if (signature === written) return;
     written = signature;
     set(BUFFER_KEY, snapshot).catch((error) =>

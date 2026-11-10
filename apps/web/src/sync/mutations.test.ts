@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, hydrate } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Stroke } from "@/api/types";
@@ -6,8 +6,9 @@ import { bytesToBase64 } from "@/ink/base64";
 import { encodePoints } from "@/ink/codec";
 
 import { DayStore } from "./day-store";
+import type { SentOp } from "./ops";
 import { confirmed, stroke } from "./fixtures";
-import { STROKE_OPS_KEY, sendOps, strokeOpsDefaults, toWireOp } from "./mutations";
+import { STROKE_OPS_KEY, adoptRestoredStrokeOps, sendOps, strokeOpsDefaults, toWireOp } from "./mutations";
 import { bindMonthsToStore, decodeMonth, monthKey, monthQuery, type MonthStrokes } from "./queries";
 
 const DAY = "2026-11-10";
@@ -234,5 +235,54 @@ describe("sending", () => {
       expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
     );
     expect(store.takeUnsent()).toHaveLength(1);
+  });
+});
+
+describe("restoring a session", () => {
+  const pausedMutation = (ops: SentOp[]) => ({
+    mutationKey: STROKE_OPS_KEY,
+    scope: { id: "strokeOps" },
+    state: {
+      context: undefined,
+      data: undefined,
+      error: null,
+      failureCount: 1,
+      failureReason: new TypeError("Failed to fetch"),
+      isPaused: true,
+      status: "pending" as const,
+      variables: { ops },
+      submittedAt: 0,
+    },
+  });
+  const add = (id: string, localSeq: number): SentOp => ({
+    op: "add",
+    stroke: stroke(id),
+    localSeq,
+    day: DAY,
+  });
+
+  it("sends each restored Op once, resuming the paused batch and then the rest, and drops a batch that already settled", async () => {
+    const { queryClient, store } = setup();
+    const [a, b, c] = [add("a", 5), add("b", 6), add("c", 7)];
+    store.restore({ ops: [a, b, c], strokes: [] });
+    hydrate(queryClient, {
+      mutations: [pausedMutation([add("settled", 1)]), pausedMutation([a, b])],
+      queries: [],
+    });
+    const { posts } = server(() => respond({ strokes: [] }));
+
+    adoptRestoredStrokeOps(queryClient, store);
+    void queryClient.resumePausedMutations();
+    await flush();
+    expect(posts.map(opIds)).toEqual([["a", "b"]]);
+
+    posts[0]!.reply(respond({ results: [{ id: "a", seq: 1 }, { id: "b", seq: 2 }] }));
+    await flush();
+    expect(posts.map(opIds)).toEqual([["a", "b"], ["c"]]);
+
+    posts[1]!.reply(respond({ results: [{ id: "c", seq: 3 }] }));
+    await flush();
+    expect(posts).toHaveLength(2);
+    expect(store.snapshotPending().ops).toEqual([]);
   });
 });

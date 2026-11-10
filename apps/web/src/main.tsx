@@ -1,6 +1,7 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, onlineManager, useIsRestoring } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import ReactDOM from "react-dom/client";
 
 import Loader from "./components/loader";
@@ -27,6 +28,7 @@ const queryClient = new QueryClient({
     },
   },
 });
+onlineManager.setOnline(navigator.onLine);
 queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, dayStore));
 bindMonthsToStore(queryClient, dayStore);
 
@@ -36,6 +38,11 @@ function onRestored() {
   void queryClient.resumePausedMutations();
   startFlushing(dayStore, () => sendOps(queryClient, dayStore));
   sendOps(queryClient, dayStore);
+}
+
+/** Route guards read the persisted cache, so the router starts only after it is restored. */
+function AfterRestore({ children }: { children: ReactNode }) {
+  return useIsRestoring() ? <Loader /> : children;
 }
 
 const router = createRouter({
@@ -69,7 +76,9 @@ if (!rootElement.innerHTML) {
       onSuccess={onRestored}
       onError={onRestored}
     >
-      <RouterProvider router={router} />
+      <AfterRestore>
+        <RouterProvider router={router} />
+      </AfterRestore>
     </PersistQueryClientProvider>,
   );
 }

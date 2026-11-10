@@ -8,13 +8,14 @@ const persister = createAsyncStoragePersister({
   storage: { getItem: get, setItem: set, removeItem: del },
 });
 
-/** Paused mutations (the default) and month queries. Nothing else, so a session never outlives its sign-in. */
+/** Paused mutations (the default), month queries and the signed-in identity, so the app opens offline. A failed refetch keeps data, so test for data, not status. */
 export const persistOptions: PersistQueryClientProviderProps["persistOptions"] = {
   persister,
   maxAge: PERSIST_MAX_AGE,
   buster: __APP_VERSION__,
   dehydrateOptions: {
     shouldDehydrateQuery: (query) =>
-      query.queryKey[0] === "month" && query.state.status === "success",
+      (query.queryKey[0] === "month" || query.queryKey[0] === "me") &&
+      query.state.data !== undefined,
   },
 };

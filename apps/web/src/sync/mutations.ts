@@ -107,13 +107,21 @@ export function sendOps(queryClient: QueryClient, store: DayStore): void {
 /**
  * Adopts `strokeOps` mutations restored from persistence: their Ops join the Overlay as in flight, so they are
  * neither shown twice nor sent twice. Nothing chains after a restored mutation, so `sendOps` runs when each settles.
+ * The buffer is written on every change and the query cache only throttled, so a mutation whose Ops the restored
+ * buffer no longer holds already settled; it is dropped, not resent.
  */
 export function adoptRestoredStrokeOps(queryClient: QueryClient, store: DayStore): void {
   const cache = queryClient.getMutationCache();
   const restored = new Set<number>();
+  const buffered = new Set(store.snapshotPending().ops.map((op) => op.localSeq));
   for (const mutation of cache.findAll({ mutationKey: STROKE_OPS_KEY })) {
     if (mutation.state.status !== "pending") continue;
-    store.restore({ ops: (mutation.state.variables as StrokeOpsVariables).ops, strokes: [] }, true);
+    const { ops } = mutation.state.variables as StrokeOpsVariables;
+    if (!ops.every((op) => buffered.has(op.localSeq))) {
+      cache.remove(mutation);
+      continue;
+    }
+    store.restore({ ops, strokes: [] }, true);
     restored.add(mutation.mutationId);
   }
   if (restored.size === 0) return;

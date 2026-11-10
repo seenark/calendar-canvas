@@ -11,6 +11,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   access_denied: "คุณยกเลิกการเข้าสู่ระบบด้วย Google",
   email_unverified: "อีเมล Google นี้ยังไม่ได้รับการยืนยัน",
   not_allowed: "อีเมลนี้ไม่ได้รับอนุญาตให้ใช้งานแอปนี้",
+  offline: "ออฟไลน์ เชื่อมต่ออินเทอร์เน็ตเพื่อเข้าสู่ระบบ",
   sign_in_failed: "เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
 };
 

@@ -42,14 +42,23 @@ export const meQuery = queryOptions({
   },
   queryKey: ["me"],
   retry: false,
+  networkMode: "always",
 });
 
-/** The signed-in identity, or null when there is no session. */
+/**
+ * The signed-in identity, or null when the server says there is no session. Any other failure (offline, 5xx)
+ * falls back to the identity from the last sign-in, so the app opens offline; with none, the failure is rethrown.
+ */
 export async function fetchMe(queryClient: QueryClient): Promise<Me | null> {
   try {
-    return await queryClient.ensureQueryData(meQuery);
+    return await queryClient.fetchQuery(meQuery);
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) return null;
+    if (err instanceof ApiError && err.status === 401) {
+      queryClient.removeQueries({ queryKey: meQuery.queryKey });
+      return null;
+    }
+    const cached = queryClient.getQueryData(meQuery.queryKey);
+    if (cached) return cached;
     throw err;
   }
 }
