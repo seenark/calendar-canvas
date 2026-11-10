@@ -1,8 +1,7 @@
 import type { Store } from "jotai/vanilla";
 
-import { simplify } from "@/ink/rdp";
 import { strokeBBox } from "@/ink/bbox";
-import { MAX_STROKE_POINTS } from "@/ink/constants";
+import { fitToLimit } from "@/ink/rdp";
 import type { InkPoint } from "@/ink/point";
 import { uuidv7 } from "@/lib/uuid";
 import { penAtom, toolAtom } from "@/state/tool";
@@ -97,6 +96,8 @@ export class DrawingEngine {
   destroy(): void {
     this.observer.disconnect();
     cancelAnimationFrame(this.frame);
+    for (const { a, commit } of this.ending) if (commit) this.finalize(a);
+    this.ending = [];
     this.liveCanvas.removeEventListener("pointerdown", this.onPointerDown);
     this.liveCanvas.removeEventListener("pointermove", this.onPointerMove);
     this.liveCanvas.removeEventListener("pointerup", this.onPointerUp);
@@ -193,7 +194,7 @@ export class DrawingEngine {
     this.fill(this.liveCtx, path, a.color);
   };
 
-  private commit(a: Active): void {
+  private finalize(a: Active): Stroke {
     const points = fitToLimit(a.points, a.hasPressure);
     const stroke: Stroke = {
       id: uuidv7(),
@@ -207,8 +208,13 @@ export class DrawingEngine {
       createdAt: Date.now(),
     };
     this.strokes.push(stroke);
-    if (!this.staticDirty) this.fill(this.staticCtx, this.outline(stroke), a.color);
     this.onCommit(stroke);
+    return stroke;
+  }
+
+  private commit(a: Active): void {
+    const stroke = this.finalize(a);
+    if (!this.staticDirty) this.fill(this.staticCtx, this.outline(stroke), a.color);
   }
 
   private outline(stroke: Stroke): Path2D {
@@ -238,12 +244,4 @@ export class DrawingEngine {
     ctx.fillStyle = color;
     ctx.fill(path);
   }
-}
-
-/** Simplifies with RDP, widening epsilon until the Stroke fits the codec's point limit. */
-function fitToLimit(points: InkPoint[], withPressure: boolean): InkPoint[] {
-  let out = simplify(points, undefined, withPressure);
-  for (let eps = 0.001; out.length > MAX_STROKE_POINTS; eps *= 2)
-    out = simplify(points, eps, withPressure);
-  return out;
 }

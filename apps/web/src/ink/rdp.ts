@@ -1,17 +1,22 @@
-import { DAY_ASPECT, DEFAULT_SIMPLIFY_EPSILON, PRESSURE_EPSILON } from "./constants";
+import {
+  DAY_ASPECT,
+  DEFAULT_SIMPLIFY_EPSILON,
+  MAX_STROKE_POINTS,
+  PRESSURE_EPSILON,
+} from "./constants";
 import type { InkPoint } from "./point";
 
 /**
  * Ramer–Douglas–Peucker. `epsilon` is in width units; y is scaled by DAY_ASPECT so distances are isotropic.
  * Always keeps the first and last points. With `withPressure`, a point whose pressure strays from the
- * linear interpolation of its neighbours by more than PRESSURE_EPSILON is kept too.
+ * linear interpolation of its neighbours by more than PRESSURE_EPSILON, scaled by epsilon / DEFAULT_SIMPLIFY_EPSILON, is kept too.
  */
 export function simplify<P extends InkPoint>(
   points: readonly P[],
   epsilon = DEFAULT_SIMPLIFY_EPSILON,
   withPressure = false,
 ): P[] {
-  const pressureScale = epsilon / PRESSURE_EPSILON;
+  const pressureScale = DEFAULT_SIMPLIFY_EPSILON / PRESSURE_EPSILON;
   const n = points.length;
   if (n <= 2) return [...points];
   const keep = new Uint8Array(n);
@@ -40,6 +45,14 @@ export function simplify<P extends InkPoint>(
     }
   }
   return points.filter((_, i) => keep[i]);
+}
+
+/** Simplifies with RDP, widening epsilon until the Stroke fits the codec's point limit. */
+export function fitToLimit<P extends InkPoint>(points: readonly P[], withPressure: boolean): P[] {
+  let out = simplify(points, undefined, withPressure);
+  for (let eps = 0.001; out.length > MAX_STROKE_POINTS; eps *= 2)
+    out = simplify(points, eps, withPressure);
+  return out;
 }
 
 export function distanceToSegment(p: InkPoint, a: InkPoint, b: InkPoint): number {

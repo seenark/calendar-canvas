@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { DAY_ASPECT } from "./constants";
+import { DAY_ASPECT, MAX_STROKE_POINTS } from "./constants";
 import type { InkPoint } from "./point";
-import { distanceToSegment, simplify } from "./rdp";
+import { distanceToSegment, fitToLimit, simplify } from "./rdp";
 
 function noisyCurve(n: number): InkPoint[] {
   let seed = 7;
@@ -108,5 +108,19 @@ describe("simplify", () => {
     expect(out[0]).toBe(loop[0]);
     expect(out.at(-1)).toBe(loop[3]);
     expect(out.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("fitToLimit", () => {
+  it("fits a pressure-rich collinear Stroke under MAX_STROKE_POINTS, keeping both ends", () => {
+    const points = Array.from({ length: 10_000 }, (_, i) => ({
+      x: i / 9_999,
+      y: 0.5,
+      pressure: i % 2 ? 0.8 : 0.2,
+    }));
+    const out = fitToLimit(points, true);
+    expect(out.length).toBeLessThanOrEqual(MAX_STROKE_POINTS);
+    expect(out[0]).toBe(points[0]);
+    expect(out.at(-1)).toBe(points.at(-1));
   });
 });
