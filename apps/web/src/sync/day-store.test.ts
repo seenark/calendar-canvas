@@ -166,4 +166,103 @@ describe("DayStore", () => {
     expect(calls).toBe(1);
     expect(store.getSnapshot(DAY)).toBe(snapshot);
   });
+
+  describe("sending", () => {
+    it("hands each Pending op out once, with its Day, oldest first", () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("a", "pen", "2026-11-09"));
+      store.commitStroke(stroke("b"));
+      store.undo(DAY);
+      const sent = store.takeUnsent();
+      expect(sent.map((o) => [o.op, o.day])).toEqual([
+        ["add", "2026-11-09"],
+        ["add", DAY],
+        ["delete", DAY],
+      ]);
+      expect(store.takeUnsent()).toEqual([]);
+      store.release(sent);
+      expect(store.takeUnsent()).toHaveLength(3);
+    });
+
+    it("notifies Op listeners after each new Op", () => {
+      const store = new DayStore();
+      let calls = 0;
+      store.subscribeOps(() => calls++);
+      store.commitStroke(stroke("a"));
+      store.undo(DAY);
+      store.redo(DAY);
+      expect(calls).toBe(3);
+    });
+
+    it("moves a Stroke from the Overlay to confirmed with its seq without changing the picture", () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("a"));
+      const before = store.getSnapshot(DAY);
+      const sent = store.takeUnsent();
+      const settled = store.settle(sent, [{ id: "a", seq: 5 }], 10);
+      expect(settled.get(DAY)).toMatchObject([{ id: "a", seq: 5 }]);
+      expect(store.getSnapshot(DAY)).toBe(before);
+      expect(store.takeUnsent()).toEqual([]);
+    });
+
+    it("keeps Ops sent later in the Overlay while an earlier batch settles", () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("a"));
+      const first = store.takeUnsent();
+      store.undo(DAY);
+      expect(ids(store)).toEqual([]);
+      store.settle(first, [{ id: "a", seq: 5 }], 10);
+      expect(ids(store)).toEqual([]);
+      store.settle(store.takeUnsent(), [{ id: "a" }], 11);
+      expect(ids(store)).toEqual([]);
+      store.redo(DAY);
+      expect(ids(store)).toEqual(["a"]);
+    });
+
+    it("a delete the server reports missing leaves the Stroke out of the picture", () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("b"));
+      store.undo(DAY);
+      store.settle(
+        store.takeUnsent(),
+        [
+          { id: "b", seq: 2 },
+          { id: "b", missing: true },
+        ],
+        10,
+      );
+      expect(ids(store)).toEqual([]);
+    });
+
+    it("rejects a response with the wrong number of results and keeps the Overlay", () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("a"));
+      expect(() => store.settle(store.takeUnsent(), [], 0)).toThrow(RangeError);
+      expect(ids(store)).toEqual(["a"]);
+    });
+
+    it("keeps counting Ops in flight as pending until they settle", () => {
+      const store = new DayStore();
+      let calls = 0;
+      store.commitStroke(stroke("a"));
+      store.commitStroke(stroke("b"));
+      const sent = store.takeUnsent();
+      expect(store.pendingCount()).toBe(2);
+      store.commitStroke(stroke("c"));
+      expect(store.pendingCount()).toBe(3);
+      store.subscribe(() => calls++);
+      store.settle(
+        sent,
+        [
+          { id: "a", seq: 1 },
+          { id: "b", seq: 2 },
+        ],
+        10,
+      );
+      expect(store.pendingCount()).toBe(1);
+      expect(calls).toBe(1);
+      store.release(store.takeUnsent());
+      expect(store.pendingCount()).toBe(1);
+    });
+  });
 });

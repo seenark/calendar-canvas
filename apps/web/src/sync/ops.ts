@@ -12,3 +12,6 @@ export type PendingOp = Op & { localSeq: number };
 export type ConfirmedStroke = Stroke & { seq: number; receivedAt: number };
 
 export const opStrokeId = (op: Op): string => (op.op === "add" ? op.stroke.id : op.id);
+
+/** A Pending op handed to the network, with its Day (a `delete` or `restore` names only an id). Plain data, so it survives JSON. */
+export type SentOp = PendingOp & { day: string };

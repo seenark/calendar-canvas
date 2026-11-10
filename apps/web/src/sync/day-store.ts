@@ -1,7 +1,9 @@
+import type { OpResult } from "@/api/types";
 import type { Stroke } from "@/drawing/stroke";
 
+import { applyResults } from "./apply";
 import { composeDay } from "./compose";
-import type { ConfirmedStroke, Op, PendingOp } from "./ops";
+import type { ConfirmedStroke, Op, PendingOp, SentOp } from "./ops";
 import { UndoHistory } from "./undo";
 
 export type DaySnapshot = {
@@ -27,12 +29,21 @@ type DayState = {
 export class DayStore {
   private readonly days = new Map<string, DayState>();
   private readonly listeners = new Set<() => void>();
+  private readonly opListeners = new Set<() => void>();
+  /** `localSeq` of Pending ops handed to the network and not yet settled or released. They stay in the Overlay meanwhile. */
+  private readonly inflight = new Set<number>();
   private localSeq = 0;
   private notifiedPending = 0;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
+  };
+
+  /** Called after every new Op, so a sender can flush. */
+  subscribeOps = (listener: () => void): (() => void) => {
+    this.opListeners.add(listener);
+    return () => this.opListeners.delete(listener);
   };
 
   getSnapshot(day: string): DaySnapshot {
@@ -53,6 +64,7 @@ export class DayStore {
     this.push(s, { op: "add", stroke });
     s.history.record(stroke.id);
     this.refresh(stroke.day);
+    this.emitOp();
   }
 
   undo(day: string): void {
@@ -61,6 +73,7 @@ export class DayStore {
     if (id === undefined) return;
     this.push(s, { op: "delete", id });
     this.refresh(day);
+    this.emitOp();
   }
 
   redo(day: string): void {
@@ -69,6 +82,7 @@ export class DayStore {
     if (id === undefined) return;
     this.push(s, { op: "restore", id });
     this.refresh(day);
+    this.emitOp();
   }
 
   clearHistory(day: string): void {
@@ -83,6 +97,57 @@ export class DayStore {
     for (const c of confirmed) s.seen.set(c.id, c);
     s.confirmed = confirmed;
     this.refresh(day);
+  }
+
+  /** Pending ops not yet in flight, oldest first. They count as in flight until `settle` or `release`. */
+  takeUnsent(): SentOp[] {
+    const out: SentOp[] = [];
+    for (const [day, s] of this.days)
+      for (const p of s.pending) if (!this.inflight.has(p.localSeq)) out.push({ ...p, day });
+    out.sort((a, b) => a.localSeq - b.localSeq);
+    for (const op of out) this.inflight.add(op.localSeq);
+    return out;
+  }
+
+  /** Returns Ops of a failed send to the unsent set. */
+  release(sent: readonly SentOp[]): void {
+    for (const op of sent) this.inflight.delete(op.localSeq);
+  }
+
+  /**
+   * Applies the server's answer to `sent`: the Ops leave the Overlay and their effect enters the confirmed
+   * layer in one refresh per Day, so the picture never shows a gap. Returns each touched Day's confirmed Strokes.
+   */
+  settle(
+    sent: readonly SentOp[],
+    results: readonly OpResult[],
+    receivedAt: number,
+  ): Map<string, ConfirmedStroke[]> {
+    if (results.length !== sent.length)
+      throw new RangeError(`Server answered ${results.length} results for ${sent.length} ops`);
+    const byDay = new Map<string, { ops: SentOp[]; results: OpResult[] }>();
+    sent.forEach((op, i) => {
+      const group = byDay.get(op.day) ?? { ops: [], results: [] };
+      group.ops.push(op);
+      group.results.push(results[i]!);
+      byDay.set(op.day, group);
+    });
+    const settled = new Map<string, ConfirmedStroke[]>();
+    for (const [day, group] of byDay) {
+      const s = this.state(day);
+      s.confirmed = applyResults(s.confirmed, group.ops, group.results, s.seen, receivedAt);
+      for (const c of s.confirmed) s.seen.set(c.id, c);
+      const done = new Set(group.ops.map((op) => op.localSeq));
+      s.pending = s.pending.filter((p) => !done.has(p.localSeq));
+      for (const seq of done) this.inflight.delete(seq);
+      settled.set(day, s.confirmed);
+      this.refresh(day);
+    }
+    return settled;
+  }
+
+  private emitOp(): void {
+    for (const listener of this.opListeners) listener();
   }
 
   private state(day: string): DayState {

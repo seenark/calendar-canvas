@@ -42,7 +42,7 @@ export interface StrokeInput {
  * Op is one entry of a batch. Add carries Stroke; Delete and Restore carry ID.
  */
 export interface Op {
-  op: string;
+  op: "add" | "delete" | "restore";
   stroke?: StrokeInput;
   id?: string;
 }

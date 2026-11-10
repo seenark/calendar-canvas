@@ -4,6 +4,7 @@ packages:
     frontmatter: |
       export type BBox = [minX: number, minY: number, maxX: number, maxY: number];
     exclude_files:
+      - admin.go
       - auth.go
       - errors.go
       - middleware.go
