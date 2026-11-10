@@ -141,7 +141,10 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
               type="button"
               aria-label={`ขนาด ${preset}`}
               aria-pressed={preset === size}
-              className={cn("grid min-h-11 min-w-11 place-items-center", preset === size && "bg-muted")}
+              className={cn(
+                "grid min-h-11 min-w-11 place-items-center",
+                preset === size && "bg-muted",
+              )}
               onClick={() => {
                 setSize(preset);
                 setTrayOpen(false);
