@@ -33,7 +33,10 @@ export function monthOfDay(day: string): string {
 export function daysOfMonth(yearMonth: string): { days: string[]; firstWeekday: number } {
   const [y, m] = yearMonth.split("-").map(Number) as [number, number];
   const count = new Date(y, m, 0).getDate();
-  const days = Array.from({ length: count }, (_, i) => `${yearMonth}-${String(i + 1).padStart(2, "0")}`);
+  const days = Array.from(
+    { length: count },
+    (_, i) => `${yearMonth}-${String(i + 1).padStart(2, "0")}`,
+  );
   return { days, firstWeekday: new Date(y, m - 1, 1).getDay() };
 }
 

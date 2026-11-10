@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { daysOfMonth, formatThaiDate, formatThaiMonth, isYearMonth, parseDay, toDayKey } from "./date";
+import {
+  daysOfMonth,
+  formatThaiDate,
+  formatThaiMonth,
+  isYearMonth,
+  parseDay,
+  toDayKey,
+} from "./date";
 
 describe("parseDay", () => {
   it("accepts real dates, including a leap day", () => {
