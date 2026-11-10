@@ -164,6 +164,14 @@ func TestAdminEndpointsRequireTheAdminRole(t *testing.T) {
 	}
 }
 
+func TestAdminSessionGetsForbiddenOnUserCalendarEndpoints(t *testing.T) {
+	e := newEnv(t, "you@gmail.com", "")
+	e.signInAdmin()
+	assertEnvelope(t, e.api(http.MethodGet, "/api/months/2026-11", nil, nil), http.StatusForbidden, "forbidden")
+	body := []byte(`{"ops":[]}`)
+	assertEnvelope(t, e.api(http.MethodPost, "/api/strokes/ops", bytes.NewReader(body), map[string]string{"Content-Type": "application/json"}), http.StatusForbidden, "forbidden")
+}
+
 func TestAdminSessionCannotReachUserEndpoints(t *testing.T) {
 	e := newEnv(t, "you@gmail.com", "")
 	e.signInAdmin()
@@ -204,6 +212,23 @@ func TestAdminListsUsers(t *testing.T) {
 	}
 }
 
+func TestAdminStrokeCountIgnoresDeletedStrokes(t *testing.T) {
+	e := newEnv(t, "*", "")
+	a := e.seedUser("a@example.com")
+	e.seedUser("b@example.com")
+	a.mustSend(addPen("11111111-1111-7111-8111-111111111111", "2026-11-03"), addPen("22222222-2222-7222-8222-222222222222", "2026-11-04"), addPen("33333333-3333-7333-8333-333333333333", "2026-11-05"))
+	a.mustSend(del("33333333-3333-7333-8333-333333333333"))
+	e.signInAdmin()
+
+	counts := map[string]int64{}
+	for _, u := range decode[[]adminUser](t, e.api(http.MethodGet, "/api/admin/users", nil, nil)) {
+		counts[u.Email] = u.StrokeCount
+	}
+	if counts["a@example.com"] != 2 || counts["b@example.com"] != 0 {
+		t.Errorf("counts = %v, want a=2 b=0", counts)
+	}
+}
+
 func TestAdminListUsersReturnsAnEmptyArray(t *testing.T) {
 	e := newEnv(t, "you@gmail.com", "")
 	e.signInAdmin()
@@ -216,25 +241,39 @@ func TestAdminListUsersReturnsAnEmptyArray(t *testing.T) {
 }
 
 func TestAdminDeletesUserAndTheirSessions(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "*", "")
+	const victimStroke, otherStroke = "11111111-1111-7111-8111-111111111111", "44444444-4444-7444-8444-444444444444"
+	e.seedUser("other@example.com").mustSend(addPen(otherStroke, "2026-11-03"))
 	e.signIn("/", nil).Body.Close()
 	userSession := e.sessionHash()
-	users := mustListUsers(t, e)
+	var victim store.User
+	for _, u := range mustListUsers(t, e) {
+		if u.Email == "you@gmail.com" {
+			victim = u
+		}
+	}
+	(&account{e: e, cookie: auth.SessionCookie + "=" + e.cookie(auth.SessionCookie).Value}).mustSend(addPen(victimStroke, "2026-11-03"))
 	e.signInAdmin()
 
-	resp := e.api(http.MethodDelete, "/api/admin/users/"+users[0].ID, nil, nil)
+	resp := e.api(http.MethodDelete, "/api/admin/users/"+victim.ID, nil, nil)
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want 204", resp.StatusCode)
 	}
 	ctx := context.Background()
-	if _, err := e.q.GetUser(ctx, users[0].ID); !errors.Is(err, sql.ErrNoRows) {
+	if _, err := e.q.GetUser(ctx, victim.ID); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("user survived: %v", err)
 	}
 	if _, err := e.q.GetSession(ctx, store.GetSessionParams{TokenHash: userSession}); !errors.Is(err, sql.ErrNoRows) {
 		t.Errorf("user session survived: %v", err)
 	}
-	assertEnvelope(t, e.api(http.MethodDelete, "/api/admin/users/"+users[0].ID, nil, nil), http.StatusNotFound, "not_found")
+	if _, err := e.q.GetStrokeOwner(ctx, victimStroke); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("user Stroke survived: %v", err)
+	}
+	if _, err := e.q.GetStrokeOwner(ctx, otherStroke); err != nil {
+		t.Errorf("another User's Stroke was removed: %v", err)
+	}
+	assertEnvelope(t, e.api(http.MethodDelete, "/api/admin/users/"+victim.ID, nil, nil), http.StatusNotFound, "not_found")
 	if !e.signedIn() {
 		t.Error("deleting a User ended the Admin session")
 	}
