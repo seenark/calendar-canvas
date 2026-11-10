@@ -1,11 +1,22 @@
-import { createFileRoute, Link, Outlet, useParams } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useParams } from "@tanstack/react-router";
 
 import { cn } from "@calendar-canvas/ui/lib/utils";
 
 import { DAY_ASPECT } from "@/ink/constants";
+import { ApiError, meQuery } from "@/lib/api";
 import { daysOfMonth, formatThaiMonth, isYearMonth, monthOfDay, toDayKey } from "@/lib/date";
 
 export const Route = createFileRoute("/_calendar")({
+  beforeLoad: async ({ context, location }) => {
+    try {
+      await context.queryClient.ensureQueryData(meQuery);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        throw redirect({ to: "/login", search: { return: location.href } });
+      }
+      throw err;
+    }
+  },
   component: CalendarLayout,
 });
 

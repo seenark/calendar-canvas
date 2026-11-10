@@ -21,7 +21,10 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      workbox: { globPatterns: ["**/*.{js,css,html,png,svg,ico}"] },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,png,svg,ico}"],
+        navigateFallbackDenylist: [/^\/api\//],
+      },
       manifest: {
         name: "Calendar Canvas",
         short_name: "Cal Canvas",
