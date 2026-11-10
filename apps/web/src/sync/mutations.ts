@@ -48,7 +48,7 @@ export function strokeOpsDefaults(
     scope: { id: "strokeOps" },
     mutationFn: sendBatch,
     onSuccess: async (response, { ops }) => {
-      const months = new Set(ops.map((op) => monthOfDay(op.day)));
+      const months = [...new Set(ops.map((op) => monthOfDay(op.day)))];
       // A refetch that started before this batch committed would overwrite the cache without its Strokes.
       await Promise.all(
         months.map((month) =>
