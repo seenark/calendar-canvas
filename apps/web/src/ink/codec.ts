@@ -11,7 +11,10 @@ const decoders: Record<number, (bytes: Uint8Array) => DecodedPoints> = {
   1: decodeV1,
 };
 
-export function encodePoints(points: readonly InkPoint[], { hasPressure }: { hasPressure: boolean }): Uint8Array {
+export function encodePoints(
+  points: readonly InkPoint[],
+  { hasPressure }: { hasPressure: boolean },
+): Uint8Array {
   if (points.length > MAX_STROKE_POINTS) {
     throw new RangeError(`Stroke has ${points.length} points, max is ${MAX_STROKE_POINTS}`);
   }
@@ -27,7 +30,8 @@ export function encodePoints(points: readonly InkPoint[], { hasPressure }: { has
     prevX = x;
     prevY = y;
     if (hasPressure) {
-      if (p.pressure === undefined) throw new TypeError("hasPressure is set but a point has no pressure");
+      if (p.pressure === undefined)
+        throw new TypeError("hasPressure is set but a point has no pressure");
       out.push(quantize(p.pressure, PRESSURE_MAX));
     }
   }
@@ -47,7 +51,8 @@ function decodeV1(bytes: Uint8Array): DecodedPoints {
   const hasPressure = (flags & FLAG_PRESSURE) !== 0;
   const cursor = { bytes, pos: 2 };
   const count = readVarint(cursor);
-  if (count > MAX_STROKE_POINTS) throw new Error(`Stroke has ${count} points, max is ${MAX_STROKE_POINTS}`);
+  if (count > MAX_STROKE_POINTS)
+    throw new Error(`Stroke has ${count} points, max is ${MAX_STROKE_POINTS}`);
   const points: InkPoint[] = [];
   let x = 0;
   let y = 0;

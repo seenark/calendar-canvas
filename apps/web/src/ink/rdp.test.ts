@@ -20,7 +20,10 @@ describe("simplify", () => {
   it("returns short inputs unchanged", () => {
     expect(simplify([], 0.01)).toEqual([]);
     expect(simplify([{ x: 0, y: 0 }], 0.01)).toEqual([{ x: 0, y: 0 }]);
-    const two = [{ x: 0, y: 0 }, { x: 1, y: 1 }];
+    const two = [
+      { x: 0, y: 0 },
+      { x: 1, y: 1 },
+    ];
     expect(simplify(two, 0.01)).toEqual(two);
   });
 
@@ -45,14 +48,19 @@ describe("simplify", () => {
       const out = simplify(points, epsilon);
       for (const p of points) {
         let nearest = Infinity;
-        for (let i = 1; i < out.length; i++) nearest = Math.min(nearest, distanceToSegment(p, out[i - 1]!, out[i]!));
+        for (let i = 1; i < out.length; i++)
+          nearest = Math.min(nearest, distanceToSegment(p, out[i - 1]!, out[i]!));
         expect(nearest).toBeLessThanOrEqual(epsilon + 1e-12);
       }
     }
   });
 
   it("measures y deviation in width units", () => {
-    const points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.0004 }, { x: 1, y: 0 }];
+    const points = [
+      { x: 0, y: 0 },
+      { x: 0.5, y: 0.0004 },
+      { x: 1, y: 0 },
+    ];
     expect(0.0004).toBeLessThan(0.00045);
     expect(0.0004 * DAY_ASPECT).toBeGreaterThan(0.00045);
     expect(simplify(points, 0.00045)).toHaveLength(3);
@@ -60,7 +68,12 @@ describe("simplify", () => {
   });
 
   it("keeps both ends of a closed loop", () => {
-    const loop = [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.2 }, { x: 0.8, y: 0.8 }, { x: 0.2, y: 0.2 }];
+    const loop = [
+      { x: 0.2, y: 0.2 },
+      { x: 0.8, y: 0.2 },
+      { x: 0.8, y: 0.8 },
+      { x: 0.2, y: 0.2 },
+    ];
     const out = simplify(loop, 0.0005);
     expect(out[0]).toBe(loop[0]);
     expect(out.at(-1)).toBe(loop[3]);

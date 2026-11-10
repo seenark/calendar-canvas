@@ -23,7 +23,9 @@ function expectClose(actual: InkPoint[], expected: InkPoint[]) {
     expect(Math.abs(actual[i]!.x - e.x)).toBeLessThanOrEqual(STEP / 2 + 1e-12);
     expect(Math.abs(actual[i]!.y - e.y)).toBeLessThanOrEqual(STEP / 2 + 1e-12);
     if (e.pressure !== undefined) {
-      expect(Math.abs(actual[i]!.pressure! - e.pressure)).toBeLessThanOrEqual(PRESSURE_STEP / 2 + 1e-12);
+      expect(Math.abs(actual[i]!.pressure! - e.pressure)).toBeLessThanOrEqual(
+        PRESSURE_STEP / 2 + 1e-12,
+      );
     } else {
       expect(actual[i]).not.toHaveProperty("pressure");
     }
@@ -77,11 +79,21 @@ describe("ink codec v1", () => {
   it("round-trips the maximum point count and rejects one more", () => {
     const points = walk(MAX_STROKE_POINTS, true);
     expectClose(decodePoints(encodePoints(points, { hasPressure: true })).points, points);
-    expect(() => encodePoints(walk(MAX_STROKE_POINTS + 1, false), { hasPressure: false })).toThrow();
+    expect(() =>
+      encodePoints(walk(MAX_STROKE_POINTS + 1, false), { hasPressure: false }),
+    ).toThrow();
   });
 
   it("keeps quantization error within one uint16 step and clamps out-of-range input", () => {
-    const decoded = decodePoints(encodePoints([{ x: 0.123456, y: 0.654321 }, { x: 1.2, y: -0.1 }], { hasPressure: false }));
+    const decoded = decodePoints(
+      encodePoints(
+        [
+          { x: 0.123456, y: 0.654321 },
+          { x: 1.2, y: -0.1 },
+        ],
+        { hasPressure: false },
+      ),
+    );
     expect(Math.abs(decoded.points[0]!.x - 0.123456)).toBeLessThanOrEqual(STEP);
     expect(Math.abs(decoded.points[0]!.y - 0.654321)).toBeLessThanOrEqual(STEP);
     expect(decoded.points[1]).toEqual({ x: 1, y: 0 });

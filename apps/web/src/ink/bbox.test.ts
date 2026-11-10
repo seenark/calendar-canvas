@@ -6,7 +6,11 @@ describe("strokeBBox", () => {
   it("includes the Stroke radius", () => {
     const size = 0.02;
     const [minX, minY, maxX, maxY] = strokeBBox(
-      [{ x: 0.2, y: 0.3 }, { x: 0.6, y: 0.1 }, { x: 0.4, y: 0.7 }],
+      [
+        { x: 0.2, y: 0.3 },
+        { x: 0.6, y: 0.1 },
+        { x: 0.4, y: 0.7 },
+      ],
       size,
     );
     expect(minX).toBeCloseTo(0.2 - size / 2);

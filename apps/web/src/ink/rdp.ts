@@ -5,7 +5,10 @@ import type { InkPoint } from "./point";
  * Ramer–Douglas–Peucker. `epsilon` is in width units; y is scaled by DAY_ASPECT so distances are isotropic.
  * Always keeps the first and last points.
  */
-export function simplify<P extends InkPoint>(points: readonly P[], epsilon = DEFAULT_SIMPLIFY_EPSILON): P[] {
+export function simplify<P extends InkPoint>(
+  points: readonly P[],
+  epsilon = DEFAULT_SIMPLIFY_EPSILON,
+): P[] {
   const n = points.length;
   if (n <= 2) return [...points];
   const keep = new Uint8Array(n);
