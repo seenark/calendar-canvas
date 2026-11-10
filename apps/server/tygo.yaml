@@ -1,0 +1,11 @@
+packages:
+  - path: "github.com/seenark/calendar-canvas/apps/server/internal/api"
+    output_path: "../web/src/api/types.ts"
+    frontmatter: |
+      export type BBox = [minX: number, minY: number, maxX: number, maxY: number];
+    exclude_files:
+      - auth.go
+      - errors.go
+      - middleware.go
+      - router.go
+      - strokes.go
