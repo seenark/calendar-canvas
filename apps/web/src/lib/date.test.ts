@@ -5,8 +5,10 @@ import {
   formatThaiDate,
   formatThaiMonth,
   isYearMonth,
+  monthIndex,
   parseDay,
   toDayKey,
+  yearMonthOfIndex,
 } from "./date";
 
 describe("parseDay", () => {
@@ -48,5 +50,12 @@ describe("month helpers", () => {
     expect(isYearMonth("2026-11")).toBe(true);
     expect(isYearMonth("2026-00")).toBe(false);
     expect(isYearMonth("2026-13")).toBe(false);
+  });
+});
+
+describe("month index", () => {
+  it("round-trips across a year boundary", () => {
+    expect(yearMonthOfIndex(monthIndex("2026-12") + 1)).toBe("2027-01");
+    expect(yearMonthOfIndex(monthIndex("2026-01") - 1)).toBe("2025-12");
   });
 });
