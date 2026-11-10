@@ -71,6 +71,7 @@ function decodeV1(bytes: Uint8Array): DecodedPoints {
 type Cursor = { bytes: Uint8Array; pos: number };
 
 function quantize(v: number, max: number): number {
+  if (!Number.isFinite(v)) throw new RangeError(`Ink value is not finite: ${v}`);
   return Math.round(Math.min(1, Math.max(0, v)) * max);
 }
 

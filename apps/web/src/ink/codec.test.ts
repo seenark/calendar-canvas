@@ -99,6 +99,16 @@ describe("ink codec v1", () => {
     expect(decoded.points[1]).toEqual({ x: 1, y: 0 });
   });
 
+  it("rejects non-finite x, y and pressure", () => {
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      expect(() => encodePoints([{ x: bad, y: 0.5 }], { hasPressure: false })).toThrow(RangeError);
+      expect(() => encodePoints([{ x: 0.5, y: bad }], { hasPressure: false })).toThrow(RangeError);
+      expect(() =>
+        encodePoints([{ x: 0.5, y: 0.5, pressure: bad }], { hasPressure: true }),
+      ).toThrow(RangeError);
+    }
+  });
+
   it("survives base64 transport", () => {
     const points = walk(200, true);
     const bytes = encodePoints(points, { hasPressure: true });
