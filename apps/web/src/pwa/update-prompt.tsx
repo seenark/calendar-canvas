@@ -53,7 +53,7 @@ export function UpdatePrompt() {
   });
   const pending = useSyncExternalStore(dayStore.subscribe, dayStore.pendingCount);
   const deferred = useRef(false);
-  const [, rerender] = useReducer((n: number) => n + 1, 0);
+  const [tick, rerender] = useReducer((n: number) => n + 1, 0);
   const down = usePointersDown(deferred, rerender);
   const [requested, setRequested] = useState(false);
   const action = decideUpdate({
@@ -96,17 +96,30 @@ export function UpdatePrompt() {
         // sonner removes a dismissed toast by id 200ms later, so re-showing the prompt sooner would be removed too
         onDismiss: () => setTimeout(() => setRequested(false), 250),
       });
-    } else if (action === "activate") {
-      const r = registration.current;
-      const target = r?.waiting ?? r?.installing ?? r?.active;
-      void updateServiceWorker(true);
-      if (target)
-        whenActivated(target).then(
-          () => setActivated(true),
-          () => setRequested(false),
-        );
-    } else if (action === "reload") window.location.reload();
-  }, [action, updateServiceWorker]);
+    }
+  }, [action]);
+
+  useEffect(() => {
+    if (action !== "activate" && action !== "reload") return;
+    // the render-time snapshot may predate a pointerdown or a new Pending op; the pointer wake-up or the store re-renders when it clears
+    if (down.current.size > 0 || dayStore.pendingCount() > 0) {
+      deferred.current = true;
+      return;
+    }
+    deferred.current = false;
+    if (action === "reload") {
+      window.location.reload();
+      return;
+    }
+    const r = registration.current;
+    const target = r?.waiting ?? r?.installing ?? r?.active;
+    void updateServiceWorker(true);
+    if (target)
+      whenActivated(target).then(
+        () => setActivated(true),
+        () => setRequested(false),
+      );
+  }, [action, tick, down, updateServiceWorker]);
 
   useEffect(() => {
     const check = () => void registration.current?.update().catch(() => {});
