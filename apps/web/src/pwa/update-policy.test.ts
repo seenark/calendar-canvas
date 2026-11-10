@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { decideUpdate, type UpdateState } from "./update-policy";
+import { decideUpdate, whenActivated, type UpdateState } from "./update-policy";
 
 const base: UpdateState = {
   needRefresh: true,
@@ -35,5 +35,39 @@ describe("decideUpdate", () => {
     const waiting = { ...base, requested: true, pending: 1 };
     expect(decideUpdate(waiting)).toBe("wait");
     expect(decideUpdate({ ...waiting, requested: false })).toBe("prompt");
+  });
+});
+
+function fakeWorker(state: string) {
+  const worker = Object.assign(new EventTarget(), { state });
+  const move = (next: string) => {
+    worker.state = next;
+    worker.dispatchEvent(new Event("statechange"));
+  };
+  return { worker: worker as unknown as ServiceWorker, move };
+}
+
+describe("whenActivated", () => {
+  it("settles from the worker state alone, as an uncontrolled page gets no controllerchange", async () => {
+    const { worker, move } = fakeWorker("installed");
+    let activated = false;
+    const done = whenActivated(worker).then(() => (activated = true));
+    move("activating");
+    await Promise.resolve();
+    expect(activated).toBe(false);
+    move("activated");
+    await done;
+    expect(activated).toBe(true);
+  });
+
+  it("settles at once when another tab already activated the worker", async () => {
+    await expect(whenActivated(fakeWorker("activated").worker)).resolves.toBeUndefined();
+  });
+
+  it("rejects when a newer build supersedes the worker", async () => {
+    const { worker, move } = fakeWorker("installed");
+    const done = whenActivated(worker);
+    move("redundant");
+    await expect(done).rejects.toThrow("superseded");
   });
 });

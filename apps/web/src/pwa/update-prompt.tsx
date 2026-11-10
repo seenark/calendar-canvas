@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 import { dayStore } from "@/sync/day-store";
 
-import { decideUpdate } from "./update-policy";
+import { decideUpdate, whenActivated } from "./update-policy";
 
 const TOAST_ID = "app-update";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -46,10 +46,8 @@ export function UpdatePrompt() {
     onRegisteredSW: (_url, r) => {
       registration.current = r;
     },
-    onNeedReload: () => {
-      setActivated(true);
-      setNeedRefresh(true);
-    },
+    // the default reloads this tab whenever any tab activates the new build
+    onNeedReload: () => {},
   });
   const pending = useSyncExternalStore(dayStore.subscribe, dayStore.pendingCount);
   const drawing = useIsDrawing();
@@ -87,8 +85,12 @@ export function UpdatePrompt() {
         // sonner removes a dismissed toast by id 200ms later, so re-showing the prompt sooner would be removed too
         onDismiss: () => setTimeout(() => setRequested(false), 250),
       });
-    } else if (action === "activate") void updateServiceWorker(true);
-    else if (action === "reload") window.location.reload();
+    } else if (action === "activate") {
+      const r = registration.current;
+      const target = r?.waiting ?? r?.installing ?? r?.active;
+      void updateServiceWorker(true);
+      if (target) whenActivated(target).then(() => setActivated(true), () => setRequested(false));
+    } else if (action === "reload") window.location.reload();
   }, [action, updateServiceWorker]);
 
   useEffect(() => {
