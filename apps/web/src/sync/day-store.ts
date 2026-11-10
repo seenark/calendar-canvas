@@ -103,11 +103,13 @@ export class DayStore {
     const key = strokes.map((stroke) => `${stroke.id}:${stroke.kind}`);
     const changed = key.length !== s.key.length || key.some((k, i) => k !== s.key[i]);
     s.key = key;
+    const { canUndo, canRedo } = s.history;
+    if (!changed && canUndo === s.snapshot.canUndo && canRedo === s.snapshot.canRedo) return;
     s.snapshot = {
       revision: s.snapshot.revision + (changed ? 1 : 0),
       strokes: changed ? strokes : s.snapshot.strokes,
-      canUndo: s.history.canUndo,
-      canRedo: s.history.canRedo,
+      canUndo,
+      canRedo,
     };
     for (const listener of this.listeners) listener();
   }
