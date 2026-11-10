@@ -12,7 +12,8 @@ import (
 	"github.com/seenark/calendar-canvas/apps/server/db"
 )
 
-const pragmas = "_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)"
+// _txlock=immediate makes every transaction take the write lock up front, so busy_timeout applies instead of a read-to-write upgrade failing at once.
+const pragmas = "_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_txlock=immediate"
 
 // Open opens the SQLite file with the required pragmas and applies pending migrations.
 func Open(path string) (*sql.DB, error) {
