@@ -2,12 +2,14 @@ import { Button } from "@calendar-canvas/ui/components/button";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { getDefaultStore } from "jotai/vanilla";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { DrawingEngine } from "@/drawing/engine";
 import { addDayStroke, getDayStrokes } from "@/drawing/memory-store";
+import { Toolbar } from "@/drawing/toolbar/toolbar";
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, monthOfDay, parseDay } from "@/lib/date";
+import { toolAtom } from "@/state/tool";
 
 export const Route = createFileRoute("/_calendar/d/$date")({
   beforeLoad: ({ params }) => {
@@ -20,17 +22,27 @@ function DrawingPage() {
   const { date } = Route.useParams();
   const router = useRouter();
   const paperRef = useRef<HTMLDivElement>(null);
+  const [paperWidth, setPaperWidth] = useState(0);
 
   useEffect(() => {
+    const store = getDefaultStore();
+    store.set(toolAtom, "pen");
     const engine = new DrawingEngine({
       container: paperRef.current!,
-      store: getDefaultStore(),
+      store,
       day: date,
       onCommit: addDayStroke,
     });
     engine.setStrokes(getDayStrokes(date));
     return () => engine.destroy();
   }, [date]);
+
+  useEffect(() => {
+    const paper = paperRef.current!;
+    const observer = new ResizeObserver(() => setPaperWidth(paper.clientWidth));
+    observer.observe(paper);
+    return () => observer.disconnect();
+  }, []);
 
   const goBack = () => {
     if (router.history.canGoBack()) router.history.back();
@@ -60,7 +72,7 @@ function DrawingPage() {
           }}
         />
       </div>
-      <div className="h-16 shrink-0" />
+      <Toolbar paperWidth={paperWidth} />
     </div>
   );
 }
