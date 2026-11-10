@@ -25,7 +25,8 @@ export function applyResults(
     if (result.missing) {
       byId.delete(id);
     } else if (op.op === "add") {
-      if (result.seq === undefined) throw new RangeError(`Server confirmed add ${id} without a seq`);
+      if (result.seq === undefined)
+        throw new RangeError(`Server confirmed add ${id} without a seq`);
       const c = { ...op.stroke, seq: result.seq, receivedAt };
       learned.set(id, c);
       byId.set(id, c);

@@ -31,7 +31,10 @@ describe("wire format", () => {
   it("encodes an add with base64 points and decodes a month back into Strokes grouped by Day", () => {
     const s = stroke("a");
     const wire = toWireOp({ op: "add", stroke: s, localSeq: 0, day: DAY });
-    expect(wire).toMatchObject({ op: "add", stroke: { id: "a", day: DAY, bbox: s.bbox, createdAt: 0 } });
+    expect(wire).toMatchObject({
+      op: "add",
+      stroke: { id: "a", day: DAY, bbox: s.bbox, createdAt: 0 },
+    });
     const input = wire.stroke!;
     const stored: Stroke = { ...input, seq: 3, receivedAt: 9 };
     const days = decodeMonth({ strokes: [stored] });
@@ -40,7 +43,10 @@ describe("wire format", () => {
   });
 
   it("sends a delete as the id alone", () => {
-    expect(toWireOp({ op: "delete", id: "a", localSeq: 0, day: DAY })).toEqual({ op: "delete", id: "a" });
+    expect(toWireOp({ op: "delete", id: "a", localSeq: 0, day: DAY })).toEqual({
+      op: "delete",
+      id: "a",
+    });
   });
 });
 
@@ -73,17 +79,27 @@ describe("sending", () => {
   it("feeds fetched month data into the store without touching Pending ops", () => {
     const { queryClient, store } = setup();
     store.commitStroke(stroke("p"));
-    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(() => {})),
+    );
     queryClient.setQueryData<MonthStrokes>(monthKey(MONTH), { [DAY]: [confirmed("x", 1)] });
     expect(store.getSnapshot(DAY).strokes.map((s) => s.id)).toEqual(["x", "p"]);
-    expect(queryClient.getQueryData<MonthStrokes>(monthKey(MONTH))![DAY]!.map((s) => s.id)).toEqual(["x"]);
+    expect(queryClient.getQueryData<MonthStrokes>(monthKey(MONTH))![DAY]!.map((s) => s.id)).toEqual(
+      ["x"],
+    );
   });
 
   it("returns the Ops to the unsent set when the batch fails", async () => {
     const { queryClient, store } = setup();
-    vi.stubGlobal("fetch", vi.fn(async () => respond({ error: { code: "internal" } }, 500)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => respond({ error: { code: "internal" } }, 500)),
+    );
     store.commitStroke(stroke("a"));
-    await vi.waitFor(() => expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"));
+    await vi.waitFor(() =>
+      expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
+    );
     expect(store.takeUnsent()).toHaveLength(1);
   });
 });

@@ -223,7 +223,14 @@ describe("DayStore", () => {
       const store = new DayStore();
       store.commitStroke(stroke("b"));
       store.undo(DAY);
-      store.settle(store.takeUnsent(), [{ id: "b", seq: 2 }, { id: "b", missing: true }], 10);
+      store.settle(
+        store.takeUnsent(),
+        [
+          { id: "b", seq: 2 },
+          { id: "b", missing: true },
+        ],
+        10,
+      );
       expect(ids(store)).toEqual([]);
     });
 
