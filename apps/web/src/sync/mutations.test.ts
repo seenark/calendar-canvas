@@ -8,7 +8,13 @@ import { encodePoints } from "@/ink/codec";
 import { DayStore } from "./day-store";
 import type { SentOp } from "./ops";
 import { confirmed, stroke } from "./fixtures";
-import { STROKE_OPS_KEY, adoptRestoredStrokeOps, sendOps, strokeOpsDefaults, toWireOp } from "./mutations";
+import {
+  STROKE_OPS_KEY,
+  adoptRestoredStrokeOps,
+  sendOps,
+  strokeOpsDefaults,
+  toWireOp,
+} from "./mutations";
 import { bindMonthsToStore, decodeMonth, monthKey, monthQuery, type MonthStrokes } from "./queries";
 
 const DAY = "2026-11-10";
@@ -276,7 +282,14 @@ describe("restoring a session", () => {
     await flush();
     expect(posts.map(opIds)).toEqual([["a", "b"]]);
 
-    posts[0]!.reply(respond({ results: [{ id: "a", seq: 1 }, { id: "b", seq: 2 }] }));
+    posts[0]!.reply(
+      respond({
+        results: [
+          { id: "a", seq: 1 },
+          { id: "b", seq: 2 },
+        ],
+      }),
+    );
     await flush();
     expect(posts.map(opIds)).toEqual([["a", "b"], ["c"]]);
 
