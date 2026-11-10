@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { QueryClient } from "@tanstack/react-query";
 
-import { ApiError, api, fetchMe } from "./api";
+import { ApiError, api, fetchMe, meQuery } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -50,5 +50,28 @@ describe("fetchMe", () => {
   it("returns the identity of a signed-in session", async () => {
     stubFetch(Response.json({ user: null, role: "admin" }));
     expect(await fetchMe(new QueryClient())).toEqual({ user: null, role: "admin" });
+  });
+
+  it("falls back to the identity of the last sign-in when the network or server fails", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(meQuery.queryKey, { user: null, role: "user" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    expect(await fetchMe(queryClient)).toEqual({ user: null, role: "user" });
+
+    stubFetch(Response.json({ error: { code: "internal", message: "x" } }, { status: 503 }));
+    expect(await fetchMe(queryClient)).toEqual({ user: null, role: "user" });
+  });
+
+  it("rethrows a network failure when no identity is cached", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    await expect(fetchMe(new QueryClient())).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("drops the cached identity when the server answers 401", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(meQuery.queryKey, { user: null, role: "user" });
+    stubFetch(Response.json({ error: { code: "unauthorized", message: "x" } }, { status: 401 }));
+    expect(await fetchMe(queryClient)).toBeNull();
+    expect(queryClient.getQueryData(meQuery.queryKey)).toBeUndefined();
   });
 });

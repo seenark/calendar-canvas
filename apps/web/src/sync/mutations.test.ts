@@ -1,4 +1,4 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, hydrate } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Stroke } from "@/api/types";
@@ -6,19 +6,27 @@ import { bytesToBase64 } from "@/ink/base64";
 import { encodePoints } from "@/ink/codec";
 
 import { DayStore } from "./day-store";
+import type { SentOp } from "./ops";
 import { confirmed, stroke } from "./fixtures";
-import { STROKE_OPS_KEY, sendOps, strokeOpsDefaults, toWireOp } from "./mutations";
+import {
+  STROKE_OPS_KEY,
+  adoptRestoredStrokeOps,
+  sendOps,
+  strokeOpsDefaults,
+  toWireOp,
+} from "./mutations";
 import { bindMonthsToStore, decodeMonth, monthKey, monthQuery, type MonthStrokes } from "./queries";
 
 const DAY = "2026-11-10";
 const MONTH = "2026-11";
+const stored = { flush: async () => {}, onStored: () => () => {} };
 
 afterEach(() => vi.unstubAllGlobals());
 
 function setup() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
   const store = new DayStore();
-  queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store));
+  queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store, stored));
   bindMonthsToStore(queryClient, store);
   store.subscribeOps(() => sendOps(queryClient, store));
   return { queryClient, store };
@@ -149,13 +157,31 @@ describe("sending", () => {
     expect(posts).toHaveLength(2);
   });
 
+  it("sends a flush as consecutive batches of at most 200 Ops, in order", async () => {
+    const queryClient = new QueryClient();
+    const store = new DayStore();
+    queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store, stored));
+    const { posts } = server(() => respond({ strokes: [] }));
+    const ids = Array.from({ length: 450 }, (_, i) => `s${i}`);
+    for (const id of ids) store.commitStroke(stroke(id));
+    sendOps(queryClient, store);
+    for (const [i, size] of [200, 200, 50].entries()) {
+      await vi.waitFor(() => expect(posts).toHaveLength(i + 1));
+      const post = posts[i]!;
+      expect(post.ops).toHaveLength(size);
+      post.reply(respond({ results: opIds(post).map((id, n) => ({ id, seq: i * 200 + n + 1 })) }));
+    }
+    await vi.waitFor(() => expect(store.pendingCount()).toBe(0));
+    expect(posts.flatMap(opIds)).toEqual(ids);
+  });
+
   it("sends nothing after a failed batch and keeps every Op in order for the next trigger", async () => {
     const { queryClient, store } = setup();
     const { posts } = server(() => respond({ strokes: [] }));
     store.commitStroke(stroke("a"));
     store.undo(DAY);
     await vi.waitFor(() => expect(posts).toHaveLength(1));
-    posts[0]!.reply(respond({ error: { code: "internal" } }, 500));
+    posts[0]!.reply(respond({ error: { code: "invalid" } }, 400));
     await vi.waitFor(() =>
       expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
     );
@@ -209,12 +235,95 @@ describe("sending", () => {
     const { queryClient, store } = setup();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => respond({ error: { code: "internal" } }, 500)),
+      vi.fn(async () => respond({ error: { code: "invalid" } }, 400)),
     );
     store.commitStroke(stroke("a"));
     await vi.waitFor(() =>
       expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
     );
     expect(store.takeUnsent()).toHaveLength(1);
+  });
+});
+
+describe("restoring a session", () => {
+  const pausedMutation = (ops: SentOp[]) => ({
+    mutationKey: STROKE_OPS_KEY,
+    scope: { id: "strokeOps" },
+    state: {
+      context: undefined,
+      data: undefined,
+      error: null,
+      failureCount: 1,
+      failureReason: new TypeError("Failed to fetch"),
+      isPaused: true,
+      status: "pending" as const,
+      variables: { ops },
+      submittedAt: 0,
+    },
+  });
+  const add = (id: string, localSeq: number): SentOp => ({
+    op: "add",
+    stroke: stroke(id),
+    localSeq,
+    day: DAY,
+  });
+
+  it("sends each restored Op once, resuming the paused batch and then the rest, and drops a batch that already settled", async () => {
+    const { queryClient, store } = setup();
+    const [a, b, c] = [add("a", 5), add("b", 6), add("c", 7)];
+    store.restore({ ops: [a, b, c], strokes: [] });
+    hydrate(queryClient, {
+      mutations: [pausedMutation([add("settled", 1)]), pausedMutation([a, b])],
+      queries: [],
+    });
+    const { posts } = server(() => respond({ strokes: [] }));
+
+    adoptRestoredStrokeOps(queryClient, store, true);
+    void queryClient.resumePausedMutations();
+    await flush();
+    expect(posts.map(opIds)).toEqual([["a", "b"]]);
+
+    posts[0]!.reply(
+      respond({
+        results: [
+          { id: "a", seq: 1 },
+          { id: "b", seq: 2 },
+        ],
+      }),
+    );
+    await flush();
+    expect(posts.map(opIds)).toEqual([["a", "b"], ["c"]]);
+
+    posts[1]!.reply(respond({ results: [{ id: "c", seq: 3 }] }));
+    await flush();
+    expect(posts).toHaveLength(2);
+    expect(store.snapshotPending().ops).toEqual([]);
+  });
+
+  it("keeps a restored batch when the buffer could not be read, since it may be the only copy", async () => {
+    const { queryClient, store } = setup();
+    hydrate(queryClient, { mutations: [pausedMutation([add("a", 5)])], queries: [] });
+    const { posts } = server(() => respond({ strokes: [] }));
+
+    adoptRestoredStrokeOps(queryClient, store, false);
+    void queryClient.resumePausedMutations();
+    await flush();
+    expect(posts.map(opIds)).toEqual([["a"]]);
+  });
+
+  it("sends nothing after a restored batch fails, until the next trigger", async () => {
+    const { queryClient, store } = setup();
+    const [a, c] = [add("a", 5), add("c", 7)];
+    store.restore({ ops: [a, c], strokes: [] });
+    hydrate(queryClient, { mutations: [pausedMutation([a])], queries: [] });
+    const { posts } = server(() => respond({ strokes: [] }));
+
+    adoptRestoredStrokeOps(queryClient, store, true);
+    void queryClient.resumePausedMutations();
+    await flush();
+    posts[0]!.reply(respond({ error: { code: "invalid" } }, 400));
+    await flush();
+    expect(posts).toHaveLength(1);
+    expect(store.takeUnsent().map((op) => op.localSeq)).toEqual([5, 7]);
   });
 });

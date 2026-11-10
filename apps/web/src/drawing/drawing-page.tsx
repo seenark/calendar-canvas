@@ -6,6 +6,7 @@ import { motion, useIsPresent, useReducedMotion } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { DrawingEngine } from "@/drawing/engine";
+import { SaveStatus } from "@/drawing/save-status";
 import { Toolbar } from "@/drawing/toolbar/toolbar";
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, monthOfDay, parseDay } from "@/lib/date";
@@ -112,6 +113,7 @@ export function DrawingPage({ date }: { date: string }) {
           <ArrowLeft />
         </Button>
         <h1 className="text-sm font-bold">{formatThaiDate(parseDay(date)!)}</h1>
+        <SaveStatus />
       </motion.header>
       <div className="grid min-h-0 flex-1 place-items-center [container-type:size]">
         <motion.div

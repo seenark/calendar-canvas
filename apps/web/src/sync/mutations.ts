@@ -6,9 +6,13 @@ import { encodePoints } from "@/ink/codec";
 import { api } from "@/lib/api";
 import { monthOfDay } from "@/lib/date";
 
+import { BATCH_LIMITS, splitBatches } from "./batches";
+import { holdBuffer } from "./buffer";
 import type { DayStore } from "./day-store";
-import type { SentOp } from "./ops";
+import { opStrokeId, type SentOp } from "./ops";
+import type { QueryCachePersister } from "./persister";
 import { monthKey, monthQuery, type MonthStrokes } from "./queries";
+import { shouldRetry, retryDelay } from "./retry";
 
 export const STROKE_OPS_KEY = ["strokeOps"] as const;
 
@@ -39,13 +43,36 @@ export const sendBatch = ({ ops }: StrokeOpsVariables) =>
     body: JSON.stringify({ ops: ops.map(toWireOp) } satisfies OpsRequest),
   });
 
-/** Defaults for `['strokeOps']`. `sendOps` keeps at most one batch in flight, so `scope` is a second guard. */
+/**
+ * Defaults for `['strokeOps']`. `sendOps` keeps at most one batch in flight, so `scope` is a second guard.
+ * A settled Op stays in the saved buffer until `persister` has stored a write whose month data holds its Stroke
+ * at the settled `seq` (or without it, for a delete). With no month query, a failed prefetch or a failed write
+ * the hold stays, and the first later write that has the month data releases it.
+ * shortcut: a Stroke another device removes before the write never matches, so the hold lasts until restart.
+ */
 export function strokeOpsDefaults(
   queryClient: QueryClient,
   store: DayStore,
+  persister: Pick<QueryCachePersister, "flush" | "onStored">,
 ): MutationOptions<OpsResponse, Error, StrokeOpsVariables> {
+  const awaiting = new Map<
+    string,
+    { month: string; day: string; seq?: number; release: () => void }
+  >();
+  persister.onStored(({ queries }) => {
+    for (const [id, { month, day, seq, release }] of awaiting) {
+      const saved = queries.find((q) => q.queryKey[0] === "month" && q.queryKey[1] === month);
+      const data = saved?.state.data as MonthStrokes | undefined;
+      if (!data || data[day]?.find((stroke) => stroke.id === id)?.seq !== seq) continue;
+      awaiting.delete(id);
+      release();
+    }
+  });
   return {
     scope: { id: "strokeOps" },
+    networkMode: "online",
+    retry: shouldRetry,
+    retryDelay,
     mutationFn: sendBatch,
     onSuccess: async (response, { ops }) => {
       const months = [...new Set(ops.map((op) => monthOfDay(op.day)))];
@@ -57,19 +84,38 @@ export function strokeOpsDefaults(
       await Promise.all(
         stale.map((month) => queryClient.cancelQueries({ queryKey: monthKey(month), exact: true })),
       );
-      const settled = store.settle(ops, response.results, Date.now());
-      for (const month of months) {
-        const key = monthKey(month);
-        // Without cached data there is nothing to merge into. A fetch started here reads after the commit,
-        // and `prefetchQuery` also covers a month nothing observes.
-        if (queryClient.getQueryData(key) === undefined) {
-          if (stale.includes(month)) void queryClient.prefetchQuery(monthQuery(month));
-          continue;
+      const guard = holdBuffer();
+      const loads: Promise<unknown>[] = [];
+      try {
+        const settled = store.settle(ops, response.results, Date.now());
+        for (const op of ops) {
+          const id = opStrokeId(op);
+          awaiting.get(id)?.release();
+          awaiting.set(id, {
+            month: monthOfDay(op.day),
+            day: op.day,
+            seq: settled.get(op.day)?.find((stroke) => stroke.id === id)?.seq,
+            release: holdBuffer(),
+          });
         }
-        queryClient.setQueryData<MonthStrokes>(key, (old) => ({
-          ...old,
-          ...Object.fromEntries([...settled].filter(([day]) => monthOfDay(day) === month)),
-        }));
+        for (const month of months) {
+          const key = monthKey(month);
+          // Without cached data there is nothing to merge into. A fetch started here reads after the commit,
+          // and `prefetchQuery` also covers a month nothing observes.
+          if (queryClient.getQueryData(key) === undefined) {
+            if (stale.includes(month)) loads.push(queryClient.prefetchQuery(monthQuery(month)));
+            continue;
+          }
+          queryClient.setQueryData<MonthStrokes>(key, (old) => ({
+            ...old,
+            ...Object.fromEntries([...settled].filter(([day]) => monthOfDay(day) === month)),
+          }));
+        }
+      } finally {
+        guard();
+        void Promise.all(loads)
+          .then(() => persister.flush())
+          .catch(() => {});
       }
     },
     onError: (_error, { ops }) => store.release(ops),
@@ -77,12 +123,14 @@ export function strokeOpsDefaults(
 }
 
 /**
- * Single-flight sender. A batch reads the unsent Ops when it starts. On success the next batch starts at once;
- * on failure its Ops return to the front of the unsent set and nothing is sent until the next trigger.
+ * Single-flight sender. A batch (at most `BATCH_LIMITS`) reads the unsent Ops when it starts. On success the next
+ * batch starts at once; on failure its Ops return to the front of the unsent set and nothing is sent until the
+ * next trigger.
  */
 export function sendOps(queryClient: QueryClient, store: DayStore): void {
   if (queryClient.isMutating({ mutationKey: STROKE_OPS_KEY }) > 0) return;
-  const ops = store.takeUnsent();
+  const [ops = [], ...rest] = splitBatches(store.takeUnsent(), BATCH_LIMITS, toWireOp);
+  store.release(rest.flat());
   if (ops.length === 0) return;
   // Built without an observer, so the mutation is garbage collected after it settles.
   queryClient
@@ -95,4 +143,41 @@ export function sendOps(queryClient: QueryClient, store: DayStore): void {
       () => sendOps(queryClient, store),
       () => undefined,
     );
+}
+
+/**
+ * Adopts `strokeOps` mutations restored from persistence: their Ops join the Overlay as in flight, so they are
+ * neither shown twice nor sent twice. Nothing chains after a restored mutation, so `sendOps` runs when one succeeds;
+ * a failed batch waits for the next trigger, as in `sendOps`.
+ * The buffer is written on every change and the query cache only throttled, so a mutation whose Ops the restored
+ * buffer no longer holds already settled; it is dropped, not resent. When the buffer could not be read
+ * (`bufferRestored` false) that rule is off, because the mutation may be the only copy.
+ */
+export function adoptRestoredStrokeOps(
+  queryClient: QueryClient,
+  store: DayStore,
+  bufferRestored: boolean,
+): void {
+  const cache = queryClient.getMutationCache();
+  const restored = new Set<number>();
+  const buffered = new Set(store.snapshotPending().ops.map((op) => op.localSeq));
+  for (const mutation of cache.findAll({ mutationKey: STROKE_OPS_KEY })) {
+    if (mutation.state.status !== "pending") continue;
+    const { ops } = mutation.state.variables as StrokeOpsVariables;
+    if (bufferRestored && !ops.every((op) => buffered.has(op.localSeq))) {
+      cache.remove(mutation);
+      continue;
+    }
+    store.restore({ ops, strokes: [] }, true);
+    restored.add(mutation.mutationId);
+  }
+  if (restored.size === 0) return;
+  const unsubscribe = cache.subscribe((event) => {
+    if (event.type !== "updated" || !restored.has(event.mutation.mutationId)) return;
+    const { status } = event.mutation.state;
+    if (status !== "success" && status !== "error") return;
+    restored.delete(event.mutation.mutationId);
+    if (restored.size === 0) unsubscribe();
+    if (status === "success") sendOps(queryClient, store);
+  });
 }

@@ -287,4 +287,44 @@ describe("DayStore", () => {
       expect(store.confirmedStrokes(DAY).map((s) => s.id)).toEqual(["old", "a", "b"]);
     });
   });
+
+  describe("restoring Pending ops from an earlier session", () => {
+    const earlier = () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("a"));
+      store.commitStroke(stroke("b"));
+      store.undo(DAY);
+      return store.snapshotPending();
+    };
+
+    it("brings back the Overlay, continues local order and offers the Ops as unsent", () => {
+      const store = new DayStore();
+      store.restore(earlier());
+      expect(ids(store)).toEqual(["a"]);
+      store.commitStroke(stroke("c"));
+      expect(store.takeUnsent().map((op) => op.localSeq)).toEqual([0, 1, 2, 3]);
+    });
+
+    it("keeps Ops marked in flight out of the unsent set and does not hold one twice", () => {
+      const store = new DayStore();
+      const snapshot = earlier();
+      store.restore(snapshot);
+      store.restore(snapshot, true);
+      expect(store.pendingCount()).toBe(3);
+      expect(store.takeUnsent()).toEqual([]);
+    });
+
+    it("carries the Stroke that a pending restore redraws once the confirmed layer lacks it", () => {
+      const store = new DayStore();
+      store.commitStroke(stroke("y"));
+      store.settle(store.takeUnsent(), [{ id: "y", seq: 1 }], 1);
+      store.undo(DAY);
+      store.redo(DAY);
+      const snapshot = store.snapshotPending();
+      expect(snapshot.strokes.map((s) => s.id)).toEqual(["y"]);
+      const restored = new DayStore();
+      restored.restore(snapshot);
+      expect(ids(restored)).toEqual(["y"]);
+    });
+  });
 });
