@@ -10,17 +10,21 @@ import (
 	"testing/fstest"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/seenark/calendar-canvas/apps/server/internal/config"
 )
+
+var testSPA = fstest.MapFS{
+	"index.html":             {Data: []byte("<html>app</html>")},
+	"sw.js":                  {Data: []byte("sw")},
+	"manifest.webmanifest":   {Data: []byte("{}")},
+	"favicon.svg":            {Data: []byte("<svg/>")},
+	"assets/index-abc123.js": {Data: []byte("console.log(1)")},
+}
 
 func newTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return NewRouter(fstest.MapFS{
-		"index.html":             {Data: []byte("<html>app</html>")},
-		"sw.js":                  {Data: []byte("sw")},
-		"manifest.webmanifest":   {Data: []byte("{}")},
-		"favicon.svg":            {Data: []byte("<svg/>")},
-		"assets/index-abc123.js": {Data: []byte("console.log(1)")},
-	})
+	return NewRouter(testSPA, config.Config{AppBaseURL: "http://app.test"}, nil)
 }
 
 func do(r http.Handler, method, target string, body io.Reader) *httptest.ResponseRecorder {
