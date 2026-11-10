@@ -24,7 +24,7 @@ var testSPA = fstest.MapFS{
 
 func newTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	return NewRouter(testSPA, config.Config{AppBaseURL: "http://app.test"}, nil)
+	return NewRouter(testSPA, config.Config{AppBaseURL: "http://app.test"}, nil, nil)
 }
 
 func do(r http.Handler, method, target string, body io.Reader) *httptest.ResponseRecorder {

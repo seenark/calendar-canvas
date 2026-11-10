@@ -74,7 +74,7 @@ func serve(cfg config.Config) error {
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           api.NewRouter(static.FS(), cfg, svc),
+		Handler:           api.NewRouter(static.FS(), cfg, svc, conn),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

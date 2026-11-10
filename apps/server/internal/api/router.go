@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"io/fs"
 	"net/http"
 	"path"
@@ -19,7 +20,7 @@ const (
 	cacheImmutable  = "public, max-age=31536000, immutable"
 )
 
-func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service) *gin.Engine {
+func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service, conn *sql.DB) *gin.Engine {
 	r := gin.New()
 	r.RedirectTrailingSlash = false
 	r.RedirectFixedPath = false
@@ -35,6 +36,11 @@ func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service) *gin.Engine {
 	signedIn := requireRole(svc, auth.RoleUser, auth.RoleAdmin)
 	api.POST("/auth/logout", signedIn, logout(svc))
 	api.GET("/me", signedIn, me)
+
+	strokes := newStrokeHandlers(conn)
+	userOnly := requireRole(svc, auth.RoleUser)
+	api.GET("/months/:month", userOnly, strokes.month)
+	api.POST("/strokes/ops", userOnly, strokes.ops)
 
 	r.NoRoute(serveSPA(spa))
 	return r
