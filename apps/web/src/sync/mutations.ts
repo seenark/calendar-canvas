@@ -10,6 +10,7 @@ import { BATCH_LIMITS, splitBatches } from "./batches";
 import { holdBuffer } from "./buffer";
 import type { DayStore } from "./day-store";
 import type { SentOp } from "./ops";
+import type { QueryCachePersister } from "./persister";
 import { monthKey, monthQuery, type MonthStrokes } from "./queries";
 import { shouldRetry, retryDelay } from "./retry";
 
@@ -44,12 +45,13 @@ export const sendBatch = ({ ops }: StrokeOpsVariables) =>
 
 /**
  * Defaults for `['strokeOps']`. `sendOps` keeps at most one batch in flight, so `scope` is a second guard.
- * `saveCache` stores the query cache and resolves when it is durable; settled Ops stay in the saved buffer until then.
+ * Settled Ops stay in the saved buffer until `persister` has stored a cache write that includes their Strokes.
+ * A failed write keeps the hold and the next successful write releases it.
  */
 export function strokeOpsDefaults(
   queryClient: QueryClient,
   store: DayStore,
-  saveCache: () => Promise<void>,
+  persister: Pick<QueryCachePersister, "flush" | "nextStored">,
 ): MutationOptions<OpsResponse, Error, StrokeOpsVariables> {
   return {
     scope: { id: "strokeOps" },
@@ -86,9 +88,8 @@ export function strokeOpsDefaults(
         }
       } finally {
         void Promise.all(loads)
-          .then(saveCache)
-          .catch((error) => console.warn("Could not save the month cache", error))
-          .finally(release);
+          .then(() => persister.flush().catch(() => persister.nextStored()))
+          .then(release);
       }
     },
     onError: (_error, { ops }) => store.release(ops),

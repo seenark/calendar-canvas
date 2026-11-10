@@ -19,16 +19,14 @@ import { bindMonthsToStore, decodeMonth, monthKey, monthQuery, type MonthStrokes
 
 const DAY = "2026-11-10";
 const MONTH = "2026-11";
+const stored = { flush: async () => {}, nextStored: async () => {} };
 
 afterEach(() => vi.unstubAllGlobals());
 
 function setup() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
   const store = new DayStore();
-  queryClient.setMutationDefaults(
-    STROKE_OPS_KEY,
-    strokeOpsDefaults(queryClient, store, async () => {}),
-  );
+  queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store, stored));
   bindMonthsToStore(queryClient, store);
   store.subscribeOps(() => sendOps(queryClient, store));
   return { queryClient, store };
@@ -162,10 +160,7 @@ describe("sending", () => {
   it("sends a flush as consecutive batches of at most 200 Ops, in order", async () => {
     const queryClient = new QueryClient();
     const store = new DayStore();
-    queryClient.setMutationDefaults(
-      STROKE_OPS_KEY,
-      strokeOpsDefaults(queryClient, store, async () => {}),
-    );
+    queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store, stored));
     const { posts } = server(() => respond({ strokes: [] }));
     const ids = Array.from({ length: 450 }, (_, i) => `s${i}`);
     for (const id of ids) store.commitStroke(stroke(id));

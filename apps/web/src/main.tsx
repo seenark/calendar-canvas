@@ -15,7 +15,11 @@ import {
   sendOps,
   strokeOpsDefaults,
 } from "./sync/mutations";
-import { PERSIST_MAX_AGE, persistOptions, saveQueryCacheNow } from "./sync/persister";
+import {
+  createQueryCachePersister,
+  PERSIST_MAX_AGE,
+  queryCachePersistOptions,
+} from "./sync/persister";
 import { bindMonthsToStore } from "./sync/queries";
 
 const queryClient = new QueryClient({
@@ -28,10 +32,11 @@ const queryClient = new QueryClient({
     },
   },
 });
+const queryCachePersister = createQueryCachePersister(queryClient);
 onlineManager.setOnline(navigator.onLine);
 queryClient.setMutationDefaults(
   STROKE_OPS_KEY,
-  strokeOpsDefaults(queryClient, dayStore, () => saveQueryCacheNow(queryClient)),
+  strokeOpsDefaults(queryClient, dayStore, queryCachePersister),
 );
 bindMonthsToStore(queryClient, dayStore);
 
@@ -77,7 +82,7 @@ if (!rootElement.innerHTML) {
   root.render(
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={persistOptions}
+      persistOptions={queryCachePersistOptions(queryCachePersister)}
       onSuccess={onRestored}
       onError={onRestored}
     >
