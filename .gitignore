@@ -8,6 +8,11 @@ dist
 build
 *.tsbuildinfo
 
+# The embedded SPA directory stays tracked as an empty placeholder
+!apps/server/internal/static/dist
+apps/server/internal/static/dist/*
+!apps/server/internal/static/dist/.gitkeep
+
 # Generated files
 apps/web/src/routeTree.gen.ts
 local.db

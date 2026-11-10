@@ -1,0 +1,75 @@
+package api
+
+import (
+	"io/fs"
+	"net/http"
+	"path"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+)
+
+const healthPath = "/api/health"
+
+const (
+	cacheRevalidate = "no-cache"
+	cacheImmutable  = "public, max-age=31536000, immutable"
+)
+
+func NewRouter(spa fs.FS) *gin.Engine {
+	r := gin.New()
+	r.RedirectTrailingSlash = false
+	r.RedirectFixedPath = false
+	r.Use(logger(), gin.Recovery(), bodyLimit, noStoreAPI)
+
+	r.GET(healthPath, func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+	r.NoRoute(serveSPA(spa))
+	return r
+}
+
+func isAPIPath(p string) bool {
+	return p == "/api" || strings.HasPrefix(p, "/api/")
+}
+
+func serveSPA(spa fs.FS) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		p := c.Request.URL.Path
+		if isAPIPath(p) {
+			abortError(c, http.StatusNotFound, "not_found", "no such API endpoint")
+			return
+		}
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			abortError(c, http.StatusNotFound, "not_found", "not found")
+			return
+		}
+
+		name := path.Clean("/" + p)[1:]
+		if info, err := fs.Stat(spa, name); name != "" && err == nil && !info.IsDir() {
+			if cc := fileCacheControl(name); cc != "" {
+				c.Header("Cache-Control", cc)
+			}
+			http.ServeFileFS(c.Writer, c.Request, spa, name)
+			return
+		}
+
+		index, err := fs.ReadFile(spa, "index.html")
+		if err != nil {
+			abortError(c, http.StatusNotFound, "not_found", "not found")
+			return
+		}
+		c.Header("Cache-Control", cacheRevalidate)
+		c.Data(http.StatusOK, "text/html; charset=utf-8", index)
+	}
+}
+
+func fileCacheControl(name string) string {
+	switch {
+	case strings.HasPrefix(name, "assets/"):
+		return cacheImmutable
+	case name == "sw.js", name == "index.html", name == "manifest.webmanifest":
+		return cacheRevalidate
+	}
+	return ""
+}
