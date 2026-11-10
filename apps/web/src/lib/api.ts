@@ -1,4 +1,7 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
+import { getDefaultStore } from "jotai/vanilla";
+
+import { needsAuthAtom } from "@/state/auth";
 
 import { requestPersistentStorage } from "./storage";
 
@@ -65,6 +68,19 @@ export async function fetchMe(queryClient: QueryClient): Promise<Me | null> {
     if (cached) return cached;
     throw err;
   }
+}
+
+/**
+ * `fetchMe` for the calendar: a 401 while an identity is cached keeps that identity and sets `needsAuth`, so an
+ * expired session never blocks drawing. With no cached identity it is `fetchMe`'s null.
+ */
+export async function fetchMeOrStay(queryClient: QueryClient): Promise<Me | null> {
+  const cached = queryClient.getQueryData(meQuery.queryKey);
+  const me = await fetchMe(queryClient);
+  if (me || !cached) return me;
+  queryClient.setQueryData(meQuery.queryKey, cached);
+  getDefaultStore().set(needsAuthAtom, true);
+  return cached;
 }
 
 export interface AdminUser {

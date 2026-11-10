@@ -1,7 +1,7 @@
 import { Button } from "@calendar-canvas/ui/components/button";
 import { createFileRoute } from "@tanstack/react-router";
 
-import { signInUrl } from "@/lib/api";
+import { persistThenSignIn } from "@/sync/session";
 
 interface LoginSearch {
   return?: string;
@@ -28,10 +28,6 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const { return: returnPath, error } = Route.useSearch();
 
-  const signIn = () => {
-    window.location.href = signInUrl(returnPath ?? "/");
-  };
-
   return (
     <main className="grid flex-1 place-items-center p-6">
       <div className="paper-shadow w-full max-w-xs">
@@ -46,7 +42,11 @@ function LoginPage() {
             </p>
           )}
           <div className="paper-shadow">
-            <Button size="lg" className="paper-torn h-11 px-6 text-sm" onClick={signIn}>
+            <Button
+              size="lg"
+              className="paper-torn h-11 px-6 text-sm"
+              onClick={() => persistThenSignIn(returnPath ?? "/")}
+            >
               เข้าสู่ระบบด้วย Google
             </Button>
           </div>

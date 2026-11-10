@@ -5,16 +5,19 @@ import {
   type Query,
   type QueryClient,
 } from "@tanstack/react-query";
+import { getDefaultStore } from "jotai/vanilla";
 import { useEffect } from "react";
 
 import type { MonthResponse } from "@/api/types";
 import { base64ToBytes } from "@/ink/base64";
 import { decodePoints } from "@/ink/codec";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { monthIndex, yearMonthOfIndex } from "@/lib/date";
+import { needsAuthAtom } from "@/state/auth";
 
 import type { DayStore } from "./day-store";
 import type { ConfirmedStroke } from "./ops";
+import { shouldRetry } from "./retry";
 
 /** A month's confirmed Strokes by Day key, each Day in ascending `seq`. Plain data, so it survives JSON. */
 export type MonthStrokes = Record<string, ConfirmedStroke[]>;
@@ -50,7 +53,16 @@ export function decodeMonth({ strokes }: MonthResponse): MonthStrokes {
 export const monthQuery = (yearMonth: string) =>
   queryOptions({
     queryKey: monthKey(yearMonth),
-    queryFn: async () => decodeMonth(await api<MonthResponse>(`/api/months/${yearMonth}`)),
+    queryFn: async () => {
+      try {
+        return decodeMonth(await api<MonthResponse>(`/api/months/${yearMonth}`));
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401)
+          getDefaultStore().set(needsAuthAtom, true);
+        throw error;
+      }
+    },
+    retry: (failureCount, error) => failureCount < 3 && shouldRetry(failureCount, error),
   });
 
 /** Observes `months` and prefetches the month on each side of them. */

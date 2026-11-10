@@ -1,11 +1,24 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { getDefaultStore } from "jotai/vanilla";
+import { toast } from "sonner";
 
-import { api } from "@/lib/api";
+import { api, signInUrl } from "@/lib/api";
 import { needsAuthAtom } from "@/state/auth";
 
+import { persistNow } from "./buffer";
 import type { DayStore } from "./day-store";
 import { sendOps } from "./mutations";
+
+/** Leaves for Google only once the buffer is in IndexedDB. When the write fails the User stays on the page, with their Strokes. */
+export async function persistThenSignIn(returnPath: string): Promise<void> {
+  try {
+    await persistNow();
+  } catch {
+    toast.error("บันทึกไม่สำเร็จ ลองอีกครั้ง");
+    return;
+  }
+  window.location.href = signInUrl(returnPath);
+}
 
 /** While `needsAuth` is set, asks the server whether the session is back. If it is, flushing resumes. */
 export async function resumeIfSignedIn(queryClient: QueryClient, store: DayStore): Promise<void> {
