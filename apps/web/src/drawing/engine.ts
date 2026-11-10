@@ -8,6 +8,15 @@ import { eraserAtom, penAtom, toolAtom } from "@/state/tool";
 
 import { REF_HEIGHT, REF_WIDTH, strokePath } from "./outline";
 import type { Stroke, StrokeKind } from "./stroke";
+import {
+  backingRatio,
+  clampZoom,
+  IDENTITY_ZOOM,
+  pinchZoom,
+  zoomTransform,
+  type Pt,
+  type Zoom,
+} from "./zoom";
 
 export type DrawingEngineOptions = {
   /** Sized by CSS to the Day's aspect ratio. The engine fills it with its two canvases. */
@@ -28,6 +37,8 @@ type Active = {
   predicted: InkPoint[];
   rect: DOMRect;
 };
+
+type Pinch = { ids: [number, number]; origin: Pt; start: Zoom; from: [Pt, Pt] };
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -54,16 +65,26 @@ export class DrawingEngine {
   private staticDirty = false;
   private frame = 0;
   private penSeen = false;
+  /** Wraps both canvases. The pinch gesture moves it with a CSS transform and nothing is redrawn until the gesture ends. */
+  private readonly layer = document.createElement("div");
+  private zoom: Zoom = IDENTITY_ZOOM;
+  private zoomDirty = false;
+  private ratio = 0;
+  private readonly touches = new Map<number, Pt>();
+  private pinch: Pinch | null = null;
+  private settleZoom = false;
 
   constructor({ container, store, day, onCommit }: DrawingEngineOptions) {
     this.container = container;
     this.store = store;
     this.day = day;
     this.onCommit = onCommit;
+    this.layer.style.cssText = "position:absolute;inset:0;transform-origin:0 0;will-change:transform";
     for (const canvas of [this.staticCanvas, this.liveCanvas]) {
       canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none";
-      container.append(canvas);
+      this.layer.append(canvas);
     }
+    container.append(this.layer);
     this.staticCtx = this.staticCanvas.getContext("2d")!;
     this.liveCtx = this.liveCanvas.getContext("2d", { desynchronized: true })!;
     this.liveCanvas.addEventListener("pointerdown", this.onPointerDown);
@@ -82,15 +103,16 @@ export class DrawingEngine {
     this.scheduleFrame();
   }
 
-  /** Re-fits both canvases to the container at the current devicePixelRatio and redraws from the cached outlines. */
+  /** Re-fits both canvases to the container at the zoom's pixel density and redraws from the cached outlines. */
   resize(): void {
-    const dpr = window.devicePixelRatio || 1;
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    if (w === 0 || h === 0) return;
+    const box = { width: this.container.clientWidth, height: this.container.clientHeight };
+    if (box.width === 0 || box.height === 0) return;
+    this.zoom = clampZoom(this.zoom, box);
+    this.layer.style.transform = zoomTransform(this.zoom);
+    this.ratio = backingRatio(window.devicePixelRatio || 1, this.zoom.scale, box);
     for (const canvas of [this.staticCanvas, this.liveCanvas]) {
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
+      canvas.width = Math.round(box.width * this.ratio);
+      canvas.height = Math.round(box.height * this.ratio);
     }
     this.redraw();
     if (this.active) {
@@ -108,17 +130,18 @@ export class DrawingEngine {
     this.liveCanvas.removeEventListener("pointermove", this.onPointerMove);
     this.liveCanvas.removeEventListener("pointerup", this.onPointerUp);
     this.liveCanvas.removeEventListener("pointercancel", this.onPointerCancel);
-    this.staticCanvas.remove();
-    this.liveCanvas.remove();
+    this.layer.remove();
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    if (this.pinch) return;
     if (e.pointerType === "pen") {
       this.penSeen = true;
       if (this.active && this.active.pointerType !== "pen") this.finish(false);
     } else if (this.penSeen && this.active?.pointerType === "pen") {
       return;
     }
+    if (e.pointerType === "touch" && this.trackTouch(e)) return;
     if (this.active || e.button > 0) return;
     const kind = this.store.get(toolAtom);
     const { color, size } =
@@ -144,6 +167,11 @@ export class DrawingEngine {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    if (this.touches.has(e.pointerId)) this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pinch) {
+      if (this.pinch.ids.includes(e.pointerId)) this.updatePinch(this.pinch);
+      return;
+    }
     const a = this.active;
     if (!a || e.pointerId !== a.pointerId) return;
     this.recordCoalesced(a, e);
@@ -152,6 +180,7 @@ export class DrawingEngine {
   };
 
   private onPointerUp = (e: PointerEvent): void => {
+    this.untrackTouch(e);
     const a = this.active;
     if (!a || e.pointerId !== a.pointerId) return;
     this.recordCoalesced(a, e);
@@ -159,8 +188,45 @@ export class DrawingEngine {
   };
 
   private onPointerCancel = (e: PointerEvent): void => {
+    this.untrackTouch(e);
     if (this.active?.pointerId === e.pointerId) this.finish(false);
   };
+
+  /** Returns true when this touch started a pinch: the Stroke it interrupted is cancelled, never committed. */
+  private trackTouch(e: PointerEvent): boolean {
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.touches.size < 2) return false;
+    if (this.active) this.finish(false);
+    this.liveCanvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    const ids = [...this.touches.keys()].slice(0, 2) as [number, number];
+    const rect = this.container.getBoundingClientRect();
+    const origin = { x: rect.left, y: rect.top };
+    this.pinch = { ids, origin, start: this.zoom, from: this.pinchPoints(ids, origin) };
+    return true;
+  }
+
+  private untrackTouch(e: PointerEvent): void {
+    if (!this.touches.delete(e.pointerId) || !this.pinch?.ids.includes(e.pointerId)) return;
+    this.pinch = null;
+    this.settleZoom = true;
+    this.scheduleFrame();
+  }
+
+  private pinchPoints(ids: [number, number], origin: Pt): [Pt, Pt] {
+    const [a, b] = ids.map((id) => this.touches.get(id)!);
+    return [
+      { x: a.x - origin.x, y: a.y - origin.y },
+      { x: b.x - origin.x, y: b.y - origin.y },
+    ];
+  }
+
+  private updatePinch(p: Pinch): void {
+    const box = { width: this.container.clientWidth, height: this.container.clientHeight };
+    this.zoom = pinchZoom(p.start, p.from, this.pinchPoints(p.ids, p.origin), box);
+    this.zoomDirty = true;
+    this.scheduleFrame();
+  }
 
   private finish(commit: boolean): void {
     this.ending.push({ a: this.active!, commit });
@@ -191,6 +257,15 @@ export class DrawingEngine {
 
   private drawFrame = (): void => {
     this.frame = 0;
+    if (this.zoomDirty) {
+      this.zoomDirty = false;
+      this.layer.style.transform = zoomTransform(this.zoom);
+    }
+    if (this.settleZoom) {
+      this.settleZoom = false;
+      const box = { width: this.container.clientWidth, height: this.container.clientHeight };
+      if (backingRatio(window.devicePixelRatio || 1, this.zoom.scale, box) !== this.ratio) this.resize();
+    }
     for (const { a, commit } of this.ending) {
       if (commit) this.commit(a);
       else if (a.kind === "eraser") this.staticDirty = true;

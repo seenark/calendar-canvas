@@ -65,7 +65,7 @@ function DrawingPage() {
       <div className="grid min-h-0 flex-1 place-items-center [container-type:size]">
         <div
           ref={paperRef}
-          className="bg-paper relative touch-none"
+          className="bg-paper relative touch-none overflow-hidden"
           style={{
             width: `min(100cqw, calc(100cqh / ${DAY_ASPECT}))`,
             aspectRatio: `1 / ${DAY_ASPECT}`,
