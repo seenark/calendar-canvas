@@ -1,0 +1,24 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-lyra",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@calendar-canvas/ui/components",
+    "utils": "@calendar-canvas/ui/lib/utils",
+    "hooks": "@calendar-canvas/ui/hooks",
+    "lib": "@calendar-canvas/ui/lib",
+    "ui": "@calendar-canvas/ui/components"
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
+}

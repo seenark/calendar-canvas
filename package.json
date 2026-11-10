@@ -1,0 +1,53 @@
+{
+  "name": "calendar-canvas",
+  "private": true,
+  "workspaces": {
+    "packages": [
+      "apps/*",
+      "packages/*"
+    ],
+    "catalog": {
+      "zod": "^4.5.4",
+      "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+      "typescript": "^6.0.3",
+      "varlock": "1.23.0",
+      "next-themes": "^0.4.6",
+      "sonner": "^2.0.8",
+      "tailwindcss": "^4.3.3"
+    }
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vp run -r dev",
+    "build": "vp run -r build",
+    "check-types": "vp run -r check-types",
+    "check": "vp check && vp run -r check-types",
+    "lint": "vp lint",
+    "format": "vp fmt",
+    "staged": "vp staged",
+    "dev:web": "vp run --filter web dev",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "env:generate": "varlock codegen --path ./apps/web/",
+    "postinstall": "varlock codegen --path ./apps/web/"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@calendar-canvas/config": "workspace:*",
+    "@types/node": "^26.4.1",
+    "lefthook": "^2.2.1",
+    "rolldown": "1.2.15",
+    "typescript": "catalog:",
+    "varlock": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "1.4.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
+  },
+  "packageManager": "bun@1.3.14"
+}

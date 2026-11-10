@@ -1,0 +1,3 @@
+{
+  "extends": "@calendar-canvas/config/tsconfig.base.json"
+}
