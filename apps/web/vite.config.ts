@@ -22,7 +22,7 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,webmanifest}"],
+        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
       },
