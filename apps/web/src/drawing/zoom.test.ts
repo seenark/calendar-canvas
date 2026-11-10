@@ -103,8 +103,6 @@ describe("backingRatio", () => {
 
 describe("zoomTransform", () => {
   it("formats a CSS transform", () => {
-    expect(zoomTransform({ scale: 2, tx: -10, ty: -20 })).toBe(
-      "translate(-10px, -20px) scale(2)",
-    );
+    expect(zoomTransform({ scale: 2, tx: -10, ty: -20 })).toBe("translate(-10px, -20px) scale(2)");
   });
 });

@@ -79,7 +79,8 @@ export class DrawingEngine {
     this.store = store;
     this.day = day;
     this.onCommit = onCommit;
-    this.layer.style.cssText = "position:absolute;inset:0;transform-origin:0 0;will-change:transform";
+    this.layer.style.cssText =
+      "position:absolute;inset:0;transform-origin:0 0;will-change:transform";
     for (const canvas of [this.staticCanvas, this.liveCanvas]) {
       canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;touch-action:none";
       this.layer.append(canvas);
@@ -167,7 +168,8 @@ export class DrawingEngine {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (this.touches.has(e.pointerId)) this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.touches.has(e.pointerId))
+      this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this.pinch) {
       if (this.pinch.ids.includes(e.pointerId)) this.updatePinch(this.pinch);
       return;
@@ -264,7 +266,8 @@ export class DrawingEngine {
     if (this.settleZoom) {
       this.settleZoom = false;
       const box = { width: this.container.clientWidth, height: this.container.clientHeight };
-      if (backingRatio(window.devicePixelRatio || 1, this.zoom.scale, box) !== this.ratio) this.resize();
+      if (backingRatio(window.devicePixelRatio || 1, this.zoom.scale, box) !== this.ratio)
+        this.resize();
     }
     for (const { a, commit } of this.ending) {
       if (commit) this.commit(a);
