@@ -24,7 +24,15 @@ describe("monthGrid", () => {
     const { weeks } = monthGrid(2028, 2);
     expect(weeks).toHaveLength(5);
     expect(weeks.flat()).toContain("2028-02-29");
-    expect(weeks[0]).toEqual([null, null, "2028-02-01", "2028-02-02", "2028-02-03", "2028-02-04", "2028-02-05"]);
+    expect(weeks[0]).toEqual([
+      null,
+      null,
+      "2028-02-01",
+      "2028-02-02",
+      "2028-02-03",
+      "2028-02-04",
+      "2028-02-05",
+    ]);
   });
 
   it("holds every Day exactly once in 7-wide weeks", () => {

@@ -27,13 +27,16 @@ export const MonthItem = memo(function MonthItem({
           </h2>
         </div>
       </div>
-      <div
-        className="grid grid-cols-7"
-        style={{ gap: GRID_GAP, paddingInline: MONTH_PADDING_X }}
-      >
-        {weeks.flat().map((day, i) =>
-          day ? <DayCell key={day} day={day} isToday={day === today} /> : <div key={`blank-${i}`} />,
-        )}
+      <div className="grid grid-cols-7" style={{ gap: GRID_GAP, paddingInline: MONTH_PADDING_X }}>
+        {weeks
+          .flat()
+          .map((day, i) =>
+            day ? (
+              <DayCell key={day} day={day} isToday={day === today} />
+            ) : (
+              <div key={`blank-${i}`} />
+            ),
+          )}
       </div>
     </>
   );
