@@ -1,21 +1,42 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import ReactDOM from "react-dom/client";
 
 import Loader from "./components/loader";
 import { routeTree } from "./routeTree.gen";
+import { persistBuffer, restoreBuffer } from "./sync/buffer";
 import { dayStore } from "./sync/day-store";
-import { STROKE_OPS_KEY, sendOps, strokeOpsDefaults } from "./sync/mutations";
+import { startFlushing } from "./sync/flush";
+import {
+  STROKE_OPS_KEY,
+  adoptRestoredStrokeOps,
+  sendOps,
+  strokeOpsDefaults,
+} from "./sync/mutations";
+import { PERSIST_MAX_AGE, persistOptions } from "./sync/persister";
 import { bindMonthsToStore } from "./sync/queries";
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: true, refetchOnReconnect: true },
+    queries: {
+      staleTime: 30_000,
+      gcTime: PERSIST_MAX_AGE,
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
   },
 });
 queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, dayStore));
 bindMonthsToStore(queryClient, dayStore);
-dayStore.subscribeOps(() => sendOps(queryClient, dayStore));
+
+/** Runs once the persisted cache is back, and not before, so a restored Op is never sent beside its restored mutation. */
+function onRestored() {
+  adoptRestoredStrokeOps(queryClient, dayStore);
+  void queryClient.resumePausedMutations();
+  startFlushing(dayStore, () => sendOps(queryClient, dayStore));
+  sendOps(queryClient, dayStore);
+}
 
 const router = createRouter({
   routeTree,
@@ -39,9 +60,16 @@ if (!rootElement) {
 
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement);
+  await restoreBuffer(dayStore);
+  persistBuffer(dayStore);
   root.render(
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={persistOptions}
+      onSuccess={onRestored}
+      onError={onRestored}
+    >
       <RouterProvider router={router} />
-    </QueryClientProvider>,
+    </PersistQueryClientProvider>,
   );
 }

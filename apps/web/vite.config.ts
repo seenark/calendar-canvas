@@ -4,7 +4,10 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 import { defineConfig } from "vite-plus";
 
+import pkg from "./package.json" with { type: "json" };
+
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   server: {
     port: 3001,
     proxy: { "/api": "http://localhost:8080" },

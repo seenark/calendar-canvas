@@ -14,6 +14,9 @@ export type DaySnapshot = {
   canRedo: boolean;
 };
 
+/** The Pending ops that must survive a reload, and the Strokes their `delete` and `restore` Ops name. Plain data. */
+export type PendingSnapshot = { ops: SentOp[]; strokes: Stroke[] };
+
 type DayState = {
   confirmed: ConfirmedStroke[];
   pending: PendingOp[];
@@ -112,12 +115,41 @@ export class DayStore {
 
   /** Pending ops not yet in flight, oldest first. They count as in flight until `settle` or `release`. */
   takeUnsent(): SentOp[] {
-    const out: SentOp[] = [];
-    for (const [day, s] of this.days)
-      for (const p of s.pending) if (!this.inflight.has(p.localSeq)) out.push({ ...p, day });
-    out.sort((a, b) => a.localSeq - b.localSeq);
+    const out = this.pendingOps().filter((op) => !this.inflight.has(op.localSeq));
     for (const op of out) this.inflight.add(op.localSeq);
     return out;
+  }
+
+  /** Every Pending op, in flight or not, oldest first, with the Strokes a `delete` or `restore` of them needs to be redrawn. */
+  snapshotPending(): PendingSnapshot {
+    const ops = this.pendingOps();
+    const added = new Set(ops.flatMap((op) => (op.op === "add" ? [op.stroke.id] : [])));
+    const strokes: Stroke[] = [];
+    for (const op of ops) {
+      if (op.op === "add" || added.has(op.id)) continue;
+      const stroke = this.days.get(op.day)?.seen.get(op.id);
+      if (stroke) strokes.push(stroke);
+      added.add(op.id);
+    }
+    return { ops, strokes };
+  }
+
+  /**
+   * Puts Pending ops of an earlier session back into the Overlay. An Op already held keeps its place. `inflight`
+   * marks them as handed to a mutation that will `settle` or `release` them.
+   */
+  restore({ ops, strokes }: PendingSnapshot, inflight = false): void {
+    for (const stroke of strokes) this.state(stroke.day).seen.set(stroke.id, stroke);
+    const days = new Set<string>();
+    for (const op of ops) {
+      const s = this.state(op.day);
+      if (!s.pending.some((p) => p.localSeq === op.localSeq)) s.pending.push(op);
+      if (op.op === "add") s.seen.set(op.stroke.id, op.stroke);
+      if (inflight) this.inflight.add(op.localSeq);
+      this.localSeq = Math.max(this.localSeq, op.localSeq + 1);
+      days.add(op.day);
+    }
+    for (const day of days) this.refresh(day);
   }
 
   /** Returns Ops of a failed send to the unsent set. */
@@ -155,6 +187,12 @@ export class DayStore {
       this.refresh(day);
     }
     return settled;
+  }
+
+  private pendingOps(): SentOp[] {
+    const out: SentOp[] = [];
+    for (const [day, s] of this.days) for (const p of s.pending) out.push({ ...p, day });
+    return out.sort((a, b) => a.localSeq - b.localSeq);
   }
 
   private emitOp(): void {

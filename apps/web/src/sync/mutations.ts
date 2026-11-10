@@ -6,9 +6,11 @@ import { encodePoints } from "@/ink/codec";
 import { api } from "@/lib/api";
 import { monthOfDay } from "@/lib/date";
 
+import { BATCH_LIMITS, splitBatches } from "./batches";
 import type { DayStore } from "./day-store";
 import type { SentOp } from "./ops";
 import { monthKey, monthQuery, type MonthStrokes } from "./queries";
+import { shouldRetry, retryDelay } from "./retry";
 
 export const STROKE_OPS_KEY = ["strokeOps"] as const;
 
@@ -46,6 +48,9 @@ export function strokeOpsDefaults(
 ): MutationOptions<OpsResponse, Error, StrokeOpsVariables> {
   return {
     scope: { id: "strokeOps" },
+    networkMode: "online",
+    retry: shouldRetry,
+    retryDelay,
     mutationFn: sendBatch,
     onSuccess: async (response, { ops }) => {
       const months = [...new Set(ops.map((op) => monthOfDay(op.day)))];
@@ -77,12 +82,14 @@ export function strokeOpsDefaults(
 }
 
 /**
- * Single-flight sender. A batch reads the unsent Ops when it starts. On success the next batch starts at once;
- * on failure its Ops return to the front of the unsent set and nothing is sent until the next trigger.
+ * Single-flight sender. A batch (at most `BATCH_LIMITS`) reads the unsent Ops when it starts. On success the next
+ * batch starts at once; on failure its Ops return to the front of the unsent set and nothing is sent until the
+ * next trigger.
  */
 export function sendOps(queryClient: QueryClient, store: DayStore): void {
   if (queryClient.isMutating({ mutationKey: STROKE_OPS_KEY }) > 0) return;
-  const ops = store.takeUnsent();
+  const [ops = [], ...rest] = splitBatches(store.takeUnsent(), BATCH_LIMITS, toWireOp);
+  store.release(rest.flat());
   if (ops.length === 0) return;
   // Built without an observer, so the mutation is garbage collected after it settles.
   queryClient
@@ -95,4 +102,27 @@ export function sendOps(queryClient: QueryClient, store: DayStore): void {
       () => sendOps(queryClient, store),
       () => undefined,
     );
+}
+
+/**
+ * Adopts `strokeOps` mutations restored from persistence: their Ops join the Overlay as in flight, so they are
+ * neither shown twice nor sent twice. Nothing chains after a restored mutation, so `sendOps` runs when each settles.
+ */
+export function adoptRestoredStrokeOps(queryClient: QueryClient, store: DayStore): void {
+  const cache = queryClient.getMutationCache();
+  const restored = new Set<number>();
+  for (const mutation of cache.findAll({ mutationKey: STROKE_OPS_KEY })) {
+    if (mutation.state.status !== "pending") continue;
+    store.restore({ ops: (mutation.state.variables as StrokeOpsVariables).ops, strokes: [] }, true);
+    restored.add(mutation.mutationId);
+  }
+  if (restored.size === 0) return;
+  const unsubscribe = cache.subscribe((event) => {
+    if (event.type !== "updated" || !restored.has(event.mutation.mutationId)) return;
+    const { status } = event.mutation.state;
+    if (status !== "success" && status !== "error") return;
+    restored.delete(event.mutation.mutationId);
+    if (restored.size === 0) unsubscribe();
+    sendOps(queryClient, store);
+  });
 }

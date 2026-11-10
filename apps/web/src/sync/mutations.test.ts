@@ -149,13 +149,31 @@ describe("sending", () => {
     expect(posts).toHaveLength(2);
   });
 
+  it("sends a flush as consecutive batches of at most 200 Ops, in order", async () => {
+    const queryClient = new QueryClient();
+    const store = new DayStore();
+    queryClient.setMutationDefaults(STROKE_OPS_KEY, strokeOpsDefaults(queryClient, store));
+    const { posts } = server(() => respond({ strokes: [] }));
+    const ids = Array.from({ length: 450 }, (_, i) => `s${i}`);
+    for (const id of ids) store.commitStroke(stroke(id));
+    sendOps(queryClient, store);
+    for (const [i, size] of [200, 200, 50].entries()) {
+      await vi.waitFor(() => expect(posts).toHaveLength(i + 1));
+      const post = posts[i]!;
+      expect(post.ops).toHaveLength(size);
+      post.reply(respond({ results: opIds(post).map((id, n) => ({ id, seq: i * 200 + n + 1 })) }));
+    }
+    await vi.waitFor(() => expect(store.pendingCount()).toBe(0));
+    expect(posts.flatMap(opIds)).toEqual(ids);
+  });
+
   it("sends nothing after a failed batch and keeps every Op in order for the next trigger", async () => {
     const { queryClient, store } = setup();
     const { posts } = server(() => respond({ strokes: [] }));
     store.commitStroke(stroke("a"));
     store.undo(DAY);
     await vi.waitFor(() => expect(posts).toHaveLength(1));
-    posts[0]!.reply(respond({ error: { code: "internal" } }, 500));
+    posts[0]!.reply(respond({ error: { code: "invalid" } }, 400));
     await vi.waitFor(() =>
       expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
     );
@@ -209,7 +227,7 @@ describe("sending", () => {
     const { queryClient, store } = setup();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => respond({ error: { code: "internal" } }, 500)),
+      vi.fn(async () => respond({ error: { code: "invalid" } }, 400)),
     );
     store.commitStroke(stroke("a"));
     await vi.waitFor(() =>
