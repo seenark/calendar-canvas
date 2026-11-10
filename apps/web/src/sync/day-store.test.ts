@@ -251,7 +251,14 @@ describe("DayStore", () => {
       store.commitStroke(stroke("c"));
       expect(store.pendingCount()).toBe(3);
       store.subscribe(() => calls++);
-      store.settle(sent, [{ id: "a", seq: 1 }, { id: "b", seq: 2 }], 10);
+      store.settle(
+        sent,
+        [
+          { id: "a", seq: 1 },
+          { id: "b", seq: 2 },
+        ],
+        10,
+      );
       expect(store.pendingCount()).toBe(1);
       expect(calls).toBe(1);
       store.release(store.takeUnsent());
