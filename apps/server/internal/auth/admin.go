@@ -12,7 +12,11 @@ import (
 	"github.com/seenark/calendar-canvas/apps/server/internal/store"
 )
 
-const adminSessionTTL = 12 * time.Hour
+const (
+	adminSessionTTL  = 12 * time.Hour
+	adminVerifySlots = 2
+	adminVerifyWait  = 2 * time.Second
+)
 
 var (
 	ErrAdminDisabled      = errors.New("admin sign-in is not configured")
@@ -31,23 +35,57 @@ func (s *Service) AdminLogin(ctx context.Context, ip, username, password string)
 
 	// Both checks always run so the response time does not reveal which one failed.
 	userOK := constantTimeEqual(username, s.cfg.AdminUsername)
-	passOK := s.cfg.AdminPasswordHash.Verify(password)
+	passOK, err := s.verifyPassword(ctx, password)
+	if err != nil {
+		return nil, err
+	}
 	if !userOK || !passOK {
 		return nil, ErrInvalidCredentials
 	}
 
 	token := randomBytes(sessionTokenByteSize)
 	now := time.Now().UnixMilli()
-	err := s.q.CreateSession(ctx, store.CreateSessionParams{
-		TokenHash: hashToken(token),
-		Role:      RoleAdmin,
-		CreatedAt: now,
-		ExpiresAt: now + adminSessionTTL.Milliseconds(),
+	fingerprint := s.cfg.AdminPasswordHash.Fingerprint()
+	err = s.q.CreateSession(ctx, store.CreateSessionParams{
+		TokenHash:        hashToken(token),
+		Role:             RoleAdmin,
+		CreatedAt:        now,
+		ExpiresAt:        now + adminSessionTTL.Milliseconds(),
+		AdminFingerprint: &fingerprint,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create admin session: %w", err)
 	}
 	return s.sessionCookie(token, adminSessionTTL), nil
+}
+
+// verifyPassword waits briefly for one of the process-wide verification slots and gives up with ErrRateLimited,
+// so concurrent logins from many addresses cannot exhaust memory.
+func (s *Service) verifyPassword(ctx context.Context, password string) (bool, error) {
+	timer := time.NewTimer(s.verifyWait)
+	defer timer.Stop()
+	select {
+	case s.verifySlots <- struct{}{}:
+		defer func() { <-s.verifySlots }()
+		return s.verify(password), nil
+	case <-timer.C:
+		return false, ErrRateLimited
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+// revokeStaleAdminSessions ends Admin sessions created under another ADMIN_PASSWORD_HASH, or all of them when
+// Admin sign-in is off.
+func (s *Service) revokeStaleAdminSessions(ctx context.Context) error {
+	var fingerprint string
+	if s.cfg.AdminEnabled() {
+		fingerprint = s.cfg.AdminPasswordHash.Fingerprint()
+	}
+	if err := s.q.DeleteAdminSessionsExceptFingerprint(ctx, &fingerprint); err != nil {
+		return fmt.Errorf("revoke stale admin sessions: %w", err)
+	}
+	return nil
 }
 
 // constantTimeEqual hashes first so the comparison time does not depend on the input lengths.

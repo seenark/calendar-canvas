@@ -80,6 +80,10 @@ type Service struct {
 	q        *store.Queries
 
 	adminLimiter *limiter
+	// verifySlots bounds concurrent argon2id verifications, which each allocate the hash's memory cost.
+	verifySlots chan struct{}
+	verifyWait  time.Duration
+	verify      func(password string) bool
 }
 
 // New discovers the OIDC provider at issuer. endpoint is the OAuth2 authorize and token URL pair.
@@ -88,7 +92,7 @@ func New(ctx context.Context, cfg config.Config, issuer string, endpoint oauth2.
 	if err != nil {
 		return nil, fmt.Errorf("discover OIDC provider %s: %w", issuer, err)
 	}
-	return &Service{
+	svc := &Service{
 		cfg: cfg,
 		oauth: oauth2.Config{
 			ClientID:     cfg.GoogleClientID,
@@ -101,7 +105,16 @@ func New(ctx context.Context, cfg config.Config, issuer string, endpoint oauth2.
 		q:        q,
 
 		adminLimiter: newLimiter(adminAttempts, adminWindow),
-	}, nil
+		verifySlots:  make(chan struct{}, adminVerifySlots),
+		verifyWait:   adminVerifyWait,
+	}
+	if cfg.AdminEnabled() {
+		svc.verify = cfg.AdminPasswordHash.Verify
+	}
+	if err := svc.revokeStaleAdminSessions(ctx); err != nil {
+		return nil, err
+	}
+	return svc, nil
 }
 
 // BeginLogin returns the Google authorization URL and the signed state cookie to set.
@@ -229,6 +242,13 @@ func (s *Service) Authenticate(ctx context.Context, r *http.Request) (*Identity,
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if sess.Role == RoleAdmin && !s.cfg.AdminEnabled() {
+		if err := s.q.DeleteSession(ctx, hash); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, nil
 	}
 
 	identity := &Identity{Role: sess.Role}
