@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
+FROM --platform=$BUILDPLATFORM oven/bun:1 AS bun
+
 FROM --platform=$BUILDPLATFORM node:24 AS web
-COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY . .
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
