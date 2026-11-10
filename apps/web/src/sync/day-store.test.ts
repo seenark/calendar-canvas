@@ -267,7 +267,7 @@ describe("DayStore", () => {
   });
 
   describe("protectedIds", () => {
-    it("names Strokes with Pending ops or an undo step, not settled ones", () => {
+    it("names Strokes with a Pending op or an undo step until the history clears, never settled ones", () => {
       const store = new DayStore();
       store.setConfirmed(DAY, [confirmed("old", 1)]);
       store.commitStroke(stroke("a"));

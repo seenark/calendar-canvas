@@ -1,8 +1,7 @@
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 
 import type { PruneRequest, PruneResponse } from "@/api/types";
-import { DAY_ASPECT } from "@/ink/constants";
 import { api } from "@/lib/api";
 import { monthOfDay } from "@/lib/date";
 import { dayStore } from "@/sync/day-store";
@@ -10,20 +9,10 @@ import { monthKey } from "@/sync/queries";
 
 import type { PruneResult } from "./plan";
 import type { PruningRequest } from "./protocol";
-
-const MIN_STROKES = 300;
-const MIN_ERASERS = 100;
+import { pruneBatches, pruneGate, verificationWidth } from "./rules";
 
 /** Days already pruned, or being pruned, in this session. */
 const started = new Set<string>();
-
-function isBusy(day: string): boolean {
-  const { strokes } = dayStore.getSnapshot(day);
-  return (
-    strokes.length >= MIN_STROKES ||
-    strokes.filter((s) => s.kind === "eraser").length >= MIN_ERASERS
-  );
-}
 
 /** `requestIdleCallback` is missing in Safari, which this app targets. */
 function whenIdle(task: () => void): () => void {
@@ -48,37 +37,46 @@ function planInWorker(request: PruningRequest): Promise<PruneResult> {
   });
 }
 
-async function pruneDay(day: string, queryClient: QueryClient): Promise<void> {
-  const width = Math.round(
-    Math.min(window.innerWidth, window.innerHeight / DAY_ASPECT) * window.devicePixelRatio,
-  );
+async function pruneDay(
+  day: string,
+  paper: HTMLElement | null,
+  queryClient: QueryClient,
+): Promise<void> {
+  const paperWidth = paper?.clientWidth ?? 0;
+  if (paperWidth === 0) return console.warn(`Pruning ${day} skipped: the paper has no width`);
+  const width = verificationWidth(paperWidth, window.devicePixelRatio || 1);
+  const strokes = dayStore.confirmedStrokes(day);
+  let submitted = false;
   try {
     const result = await planInWorker({
-      strokes: dayStore.confirmedStrokes(day),
+      strokes,
       now: Date.now(),
       protectedIds: [...dayStore.protectedIds(day)],
       width,
     });
     if ("aborted" in result) return console.warn(`Pruning ${day} aborted: ${result.aborted}`);
-    if (result.deleteIds.length === 0) return;
-    await api<PruneResponse>(`/api/days/${day}/prune`, {
-      method: "POST",
-      body: JSON.stringify({ deleteIds: result.deleteIds } satisfies PruneRequest),
-    });
-    await queryClient.refetchQueries({ queryKey: monthKey(monthOfDay(day)) });
+    for (const deleteIds of pruneBatches(result.deleteIds, strokes)) {
+      submitted = true;
+      await api<PruneResponse>(`/api/days/${day}/prune`, {
+        method: "POST",
+        body: JSON.stringify({ deleteIds } satisfies PruneRequest),
+      });
+    }
   } catch (error) {
     console.warn(`Pruning ${day} failed`, error);
   }
+  if (submitted) await queryClient.refetchQueries({ queryKey: monthKey(monthOfDay(day)) });
 }
 
 /**
  * Prunes the Day once per session, when it holds at least 300 Strokes or 100 Erasers, in an idle moment and
- * never while a pointer is down.
+ * never while a pointer is down. The verification canvas follows the width of the Drawing page's paper.
  */
-export function usePruning(day: string): void {
+export function usePruning(day: string, paperRef: RefObject<HTMLElement | null>): void {
   const queryClient = useQueryClient();
   useEffect(() => {
     if (started.has(day)) return;
+    const gate = () => pruneGate(dayStore.getSnapshot(day).strokes, started.has(day), down.size);
     const down = new Set<number>();
     let cancelIdle: (() => void) | undefined;
     let waiting = false;
@@ -86,17 +84,16 @@ export function usePruning(day: string): void {
     const schedule = () => {
       cancelIdle = whenIdle(() => {
         cancelIdle = undefined;
-        if (down.size > 0) {
-          waiting = true;
-          return;
-        }
+        const verdict = gate();
+        if (verdict === "defer") waiting = true;
+        if (verdict !== "run") return;
         stop();
         started.add(day);
-        void pruneDay(day, queryClient);
+        void pruneDay(day, paperRef.current, queryClient);
       });
     };
     const check = () => {
-      if (!cancelIdle && !waiting && isBusy(day)) schedule();
+      if (!cancelIdle && !waiting && gate() !== "skip") schedule();
     };
     const onDown = (e: PointerEvent) => down.add(e.pointerId);
     const onUp = (e: PointerEvent) => {
@@ -119,5 +116,5 @@ export function usePruning(day: string): void {
     window.addEventListener("pointercancel", onUp, true);
     check();
     return stop;
-  }, [day, queryClient]);
+  }, [day, paperRef, queryClient]);
 }
