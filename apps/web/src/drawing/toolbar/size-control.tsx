@@ -1,6 +1,6 @@
 import { cn } from "@calendar-canvas/ui/lib/utils";
 import { useAtom, useAtomValue } from "jotai/react";
-import { useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type Ref } from "react";
 
 import { SIZE_PRESETS, sizeFromDrag } from "@/drawing/sizes";
 import type { StrokeKind } from "@/drawing/stroke";
@@ -8,8 +8,6 @@ import { eraserAtom, penAtom, toolAtom } from "@/state/tool";
 
 const LONG_PRESS_MS = 350;
 const TAP_SLOP_PX = 10;
-/** shortcut: the dot is capped at the 44px target, so the largest Eraser presets show smaller than real. */
-const MAX_DOT_PX = 40;
 
 type Gesture = {
   startY: number;
@@ -24,16 +22,25 @@ function SizeDot({
   paperWidth,
   tool,
   color,
+  className,
+  ref,
 }: {
   size: number;
   paperWidth: number;
   tool: StrokeKind;
   color: string;
+  className?: string;
+  ref?: Ref<HTMLSpanElement>;
 }) {
-  const px = Math.min(MAX_DOT_PX, Math.max(2, size * paperWidth));
+  const px = size * paperWidth;
   return (
     <span
-      className={cn("rounded-full", tool === "eraser" && "border-foreground/60 border")}
+      ref={ref}
+      className={cn(
+        "pointer-events-none rounded-full",
+        tool === "eraser" && "border-foreground/60 border",
+        className,
+      )}
       style={{ width: px, height: px, backgroundColor: tool === "pen" ? color : "var(--paper)" }}
     />
   );
@@ -45,7 +52,10 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
   const [pen, setPen] = useAtom(penAtom);
   const [eraser, setEraser] = useAtom(eraserAtom);
   const [trayOpen, setTrayOpen] = useState(false);
-  const [fineSize, setFineSize] = useState<number | null>(null);
+  const [fineTuning, setFineTuning] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const buttonDot = useRef<HTMLSpanElement>(null);
+  const popoverDot = useRef<HTMLSpanElement>(null);
   const gesture = useRef<Gesture | null>(null);
   const suppressClick = useRef(false);
 
@@ -54,10 +64,27 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
     tool === "pen" ? setPen((p) => ({ ...p, size: next })) : setEraser({ size: next });
   const dot = { paperWidth, tool, color: pen.color };
 
-  const endGesture = () => {
+  useEffect(() => {
+    if (!trayOpen) return;
+    const close = (e: globalThis.PointerEvent) => {
+      if (!root.current?.contains(e.target as Node)) setTrayOpen(false);
+    };
+    document.addEventListener("pointerdown", close, true);
+    return () => document.removeEventListener("pointerdown", close, true);
+  }, [trayOpen]);
+
+  /** Pointer moves repaint the dots directly. State changes only when the long-press starts and ends. */
+  const paint = (s: number) => {
+    for (const el of [buttonDot.current, popoverDot.current]) {
+      if (el) el.style.width = el.style.height = `${s * paperWidth}px`;
+    }
+  };
+
+  const endGesture = (finalSize: number) => {
     if (gesture.current) window.clearTimeout(gesture.current.timer);
     gesture.current = null;
-    setFineSize(null);
+    setFineTuning(false);
+    paint(finalSize);
   };
 
   const onPointerDown = (e: PointerEvent<HTMLButtonElement>) => {
@@ -70,7 +97,7 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
       moved: false,
       timer: window.setTimeout(() => {
         g.fineTuning = true;
-        setFineSize(g.startSize);
+        setFineTuning(true);
       }, LONG_PRESS_MS),
     };
     gesture.current = g;
@@ -80,7 +107,7 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
     const g = gesture.current;
     if (!g) return;
     const dy = e.clientY - g.startY;
-    if (g.fineTuning) setFineSize(sizeFromDrag(g.startSize, dy));
+    if (g.fineTuning) paint(sizeFromDrag(g.startSize, dy));
     else if (Math.abs(dy) > TAP_SLOP_PX) {
       window.clearTimeout(g.timer);
       g.moved = true;
@@ -90,16 +117,20 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
   const onPointerUp = (e: PointerEvent<HTMLButtonElement>) => {
     const g = gesture.current;
     if (!g) return;
-    if (g.fineTuning) setSize(sizeFromDrag(g.startSize, e.clientY - g.startY));
+    let next = size;
+    if (g.fineTuning) {
+      next = sizeFromDrag(g.startSize, e.clientY - g.startY);
+      setSize(next);
+    }
     suppressClick.current = g.fineTuning || g.moved;
-    endGesture();
+    endGesture(next);
   };
 
   return (
-    <div className="relative">
-      {fineSize !== null && (
-        <div className="bg-popover paper-shadow absolute bottom-full left-1/2 mb-2 grid size-16 -translate-x-1/2 place-items-center rounded-full">
-          <SizeDot size={fineSize} {...dot} />
+    <div ref={root} className="relative">
+      {fineTuning && (
+        <div className="bg-popover paper-shadow absolute bottom-full left-1/2 mb-2 grid min-h-16 min-w-16 -translate-x-1/2 place-items-center rounded-full">
+          <SizeDot ref={popoverDot} size={size} {...dot} />
         </div>
       )}
       {trayOpen && (
@@ -110,7 +141,7 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
               type="button"
               aria-label={`ขนาด ${preset}`}
               aria-pressed={preset === size}
-              className={cn("grid size-11 place-items-center", preset === size && "bg-muted")}
+              className={cn("grid min-h-11 min-w-11 place-items-center", preset === size && "bg-muted")}
               onClick={() => {
                 setSize(preset);
                 setTrayOpen(false);
@@ -125,18 +156,23 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
         type="button"
         aria-label="ขนาดเส้น"
         aria-expanded={trayOpen}
-        className="hover:bg-muted grid size-11 touch-none place-items-center select-none"
+        className="hover:bg-muted relative size-11 touch-none select-none"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={endGesture}
+        onPointerCancel={() => endGesture(size)}
         onContextMenu={(e) => e.preventDefault()}
         onClick={() => {
           if (suppressClick.current) suppressClick.current = false;
           else setTrayOpen((open) => !open);
         }}
       >
-        <SizeDot size={fineSize ?? size} {...dot} />
+        <SizeDot
+          ref={buttonDot}
+          size={size}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          {...dot}
+        />
       </button>
     </div>
   );
