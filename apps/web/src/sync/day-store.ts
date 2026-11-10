@@ -28,6 +28,7 @@ export class DayStore {
   private readonly days = new Map<string, DayState>();
   private readonly listeners = new Set<() => void>();
   private localSeq = 0;
+  private notifiedPending = 0;
 
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
@@ -37,6 +38,13 @@ export class DayStore {
   getSnapshot(day: string): DaySnapshot {
     return this.state(day).snapshot;
   }
+
+  /** Pending ops across all Days. Subscribers are also notified when this changes. */
+  pendingCount = (): number => {
+    let n = 0;
+    for (const s of this.days.values()) n += s.pending.length;
+    return n;
+  };
 
   /** The Stroke becomes a pending `add` and the newest undo step. */
   commitStroke(stroke: Stroke): void {
@@ -104,13 +112,20 @@ export class DayStore {
     const changed = key.length !== s.key.length || key.some((k, i) => k !== s.key[i]);
     s.key = key;
     const { canUndo, canRedo } = s.history;
-    if (!changed && canUndo === s.snapshot.canUndo && canRedo === s.snapshot.canRedo) return;
-    s.snapshot = {
-      revision: s.snapshot.revision + (changed ? 1 : 0),
-      strokes: changed ? strokes : s.snapshot.strokes,
-      canUndo,
-      canRedo,
-    };
+    const pending = this.pendingCount();
+    const pendingChanged = pending !== this.notifiedPending;
+    this.notifiedPending = pending;
+    const snapshotChanged =
+      changed || canUndo !== s.snapshot.canUndo || canRedo !== s.snapshot.canRedo;
+    if (!snapshotChanged && !pendingChanged) return;
+    if (snapshotChanged) {
+      s.snapshot = {
+        revision: s.snapshot.revision + (changed ? 1 : 0),
+        strokes: changed ? strokes : s.snapshot.strokes,
+        canUndo,
+        canRedo,
+      };
+    }
     for (const listener of this.listeners) listener();
   }
 }
