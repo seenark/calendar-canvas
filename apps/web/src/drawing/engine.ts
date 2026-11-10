@@ -233,10 +233,8 @@ export class DrawingEngine {
   private commit(a: Active): void {
     const stroke = this.finalize(a);
     if (this.staticDirty) return;
-    if (stroke.kind === "eraser") {
-      this.eraseOverSnapshot(this.outline(stroke));
-      this.snapshotValid = false;
-    } else this.fill(this.staticCtx, this.outline(stroke), stroke.color);
+    if (stroke.kind === "eraser") this.staticDirty = true;
+    else this.fill(this.staticCtx, this.outline(stroke), stroke.color);
   }
 
   private outline(stroke: Stroke): Path2D {
@@ -255,8 +253,9 @@ export class DrawingEngine {
   }
 
   /**
-   * Restores the pre-Eraser pixels and erases one whole outline from them, so the static canvas is always
-   * "earlier Strokes, then this outline", the same composition `redraw` produces for a committed Eraser.
+   * Live Eraser preview: restores the pre-Eraser pixels and erases one whole outline from them. Edge pixels
+   * differ slightly from `redraw` (Chrome rasterizes drawImage then destination-out in one batch), so a
+   * committed Eraser repaints through `redraw` instead of keeping this result.
    */
   private eraseOverSnapshot(outline: Path2D): void {
     if (!this.snapshotValid) this.takeSnapshot();
