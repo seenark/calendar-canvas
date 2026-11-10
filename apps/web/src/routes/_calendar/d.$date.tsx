@@ -2,14 +2,14 @@ import { Button } from "@calendar-canvas/ui/components/button";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { getDefaultStore } from "jotai/vanilla";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { DrawingEngine } from "@/drawing/engine";
-import { addDayStroke, getDayStrokes } from "@/drawing/memory-store";
 import { Toolbar } from "@/drawing/toolbar/toolbar";
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, monthOfDay, parseDay } from "@/lib/date";
 import { toolAtom } from "@/state/tool";
+import { dayStore } from "@/sync/day-store";
 
 export const Route = createFileRoute("/_calendar/d/$date")({
   beforeLoad: ({ params }) => {
@@ -23,6 +23,14 @@ function DrawingPage() {
   const router = useRouter();
   const paperRef = useRef<HTMLDivElement>(null);
   const [paperWidth, setPaperWidth] = useState(0);
+  const canUndo = useSyncExternalStore(
+    dayStore.subscribe,
+    () => dayStore.getSnapshot(date).canUndo,
+  );
+  const canRedo = useSyncExternalStore(
+    dayStore.subscribe,
+    () => dayStore.getSnapshot(date).canRedo,
+  );
 
   useEffect(() => {
     const store = getDefaultStore();
@@ -31,10 +39,22 @@ function DrawingPage() {
       container: paperRef.current!,
       store,
       day: date,
-      onCommit: addDayStroke,
+      onCommit: (stroke) => dayStore.commitStroke(stroke),
     });
-    engine.setStrokes(getDayStrokes(date));
-    return () => engine.destroy();
+    let revision = -1;
+    const sync = () => {
+      const snapshot = dayStore.getSnapshot(date);
+      if (snapshot.revision === revision) return;
+      revision = snapshot.revision;
+      engine.setStrokes(snapshot.strokes);
+    };
+    const unsubscribe = dayStore.subscribe(sync);
+    sync();
+    return () => {
+      engine.destroy();
+      unsubscribe();
+      dayStore.clearHistory(date);
+    };
   }, [date]);
 
   useEffect(() => {
@@ -72,7 +92,13 @@ function DrawingPage() {
           }}
         />
       </div>
-      <Toolbar paperWidth={paperWidth} />
+      <Toolbar
+        paperWidth={paperWidth}
+        canUndo={canUndo}
+        canRedo={canRedo}
+        onUndo={() => dayStore.undo(date)}
+        onRedo={() => dayStore.redo(date)}
+      />
     </div>
   );
 }

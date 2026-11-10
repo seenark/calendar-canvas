@@ -58,7 +58,7 @@ export class DrawingEngine {
   private readonly staticCtx: CanvasRenderingContext2D;
   private readonly liveCtx: CanvasRenderingContext2D;
   private readonly observer: ResizeObserver;
-  private strokes: Stroke[] = [];
+  private strokes: readonly Stroke[] = [];
   private readonly paths = new Map<string, Path2D>();
   private active: Active | null = null;
   private ending: { a: Active; commit: boolean }[] = [];
@@ -97,9 +97,20 @@ export class DrawingEngine {
     this.resize();
   }
 
+  /** Takes the Day's composed picture. A list that only appends Pen Strokes paints just those, anything else repaints in the next frame. */
   setStrokes(strokes: readonly Stroke[]): void {
-    this.strokes = [...strokes];
-    this.paths.clear();
+    const prev = this.strokes;
+    this.strokes = strokes;
+    if (this.staticDirty) return;
+    const appended =
+      this.active?.kind !== "eraser" &&
+      strokes.length >= prev.length &&
+      prev.every((s, i) => s === strokes[i]);
+    const added = appended ? strokes.slice(prev.length) : [];
+    if (appended && added.every((s) => s.kind === "pen")) {
+      for (const s of added) this.fill(this.staticCtx, this.outline(s), s.color);
+      return;
+    }
     this.staticDirty = true;
     this.scheduleFrame();
   }
@@ -125,8 +136,8 @@ export class DrawingEngine {
 
   destroy(): void {
     this.observer.disconnect();
-    cancelAnimationFrame(this.frame);
     for (const { a, commit } of this.ending) if (commit) this.finalize(a);
+    cancelAnimationFrame(this.frame);
     this.ending = [];
     this.liveCanvas.removeEventListener("pointerdown", this.onPointerDown);
     this.liveCanvas.removeEventListener("pointermove", this.onPointerMove);
@@ -285,7 +296,7 @@ export class DrawingEngine {
     }
     const cancelled = this.ending.length > 0;
     for (const { a, commit } of this.ending) {
-      if (commit) this.commit(a);
+      if (commit) this.finalize(a);
       else if (a.kind === "eraser") this.staticDirty = true;
     }
     this.ending = [];
@@ -311,7 +322,7 @@ export class DrawingEngine {
     this.fill(this.liveCtx, path, a.color);
   };
 
-  private finalize(a: Active): Stroke {
+  private finalize(a: Active): void {
     const points = fitToLimit(a.points, a.hasPressure);
     const stroke: Stroke = {
       id: uuidv7(),
@@ -324,16 +335,7 @@ export class DrawingEngine {
       bbox: strokeBBox(points, a.size, a.kind),
       createdAt: Date.now(),
     };
-    this.strokes.push(stroke);
     this.onCommit(stroke);
-    return stroke;
-  }
-
-  private commit(a: Active): void {
-    const stroke = this.finalize(a);
-    if (this.staticDirty) return;
-    if (stroke.kind === "eraser") this.staticDirty = true;
-    else this.fill(this.staticCtx, this.outline(stroke), stroke.color);
   }
 
   private outline(stroke: Stroke): Path2D {
