@@ -92,7 +92,11 @@ export class ThumbnailClient {
       type: "module",
     });
     worker.onmessage = ({ data }: MessageEvent<ThumbnailResponse>) => this.settle(data);
-    worker.onerror = () => this.settle(null);
+    worker.onerror = () => {
+      worker.terminate();
+      this.worker = undefined;
+      this.settle(null);
+    };
     return worker;
   }
 
