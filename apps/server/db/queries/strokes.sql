@@ -24,3 +24,6 @@ DELETE FROM strokes WHERE deleted_at IS NOT NULL AND deleted_at < ?;
 SELECT * FROM strokes
 WHERE user_id = sqlc.arg(user_id) AND day >= sqlc.arg(first_day) AND day <= sqlc.arg(last_day) AND deleted_at IS NULL
 ORDER BY seq;
+
+-- name: CountStrokesByUser :many
+SELECT user_id, COUNT(*) AS stroke_count FROM strokes WHERE deleted_at IS NULL GROUP BY user_id;

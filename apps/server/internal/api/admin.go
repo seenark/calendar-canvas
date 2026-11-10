@@ -74,7 +74,16 @@ func listUsers(q *store.Queries) gin.HandlerFunc {
 			abortError(c, http.StatusInternalServerError, "internal", "internal error")
 			return
 		}
-		counts := strokeCounts()
+		rows, err := q.CountStrokesByUser(c.Request.Context())
+		if err != nil {
+			slog.Error("count strokes", "error", err)
+			abortError(c, http.StatusInternalServerError, "internal", "internal error")
+			return
+		}
+		counts := make(map[string]int64, len(rows))
+		for _, r := range rows {
+			counts[r.UserID] = r.StrokeCount
+		}
 		out := make([]adminUser, len(users))
 		for i, u := range users {
 			out[i] = adminUser{u.ID, u.Email, u.Name, u.AvatarUrl, u.CreatedAt, u.LastLoginAt, counts[u.ID]}
@@ -82,10 +91,6 @@ func listUsers(q *store.Queries) gin.HandlerFunc {
 		c.JSON(http.StatusOK, out)
 	}
 }
-
-// strokeCounts maps User id to the number of non-deleted Strokes. Stroke storage does not exist yet (ticket 13),
-// so every User has none.
-func strokeCounts() map[string]int64 { return nil }
 
 func deleteUser(q *store.Queries) gin.HandlerFunc {
 	return func(c *gin.Context) {
