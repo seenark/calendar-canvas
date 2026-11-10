@@ -20,7 +20,8 @@ const started = new Set<string>();
 function isBusy(day: string): boolean {
   const { strokes } = dayStore.getSnapshot(day);
   return (
-    strokes.length >= MIN_STROKES || strokes.filter((s) => s.kind === "eraser").length >= MIN_ERASERS
+    strokes.length >= MIN_STROKES ||
+    strokes.filter((s) => s.kind === "eraser").length >= MIN_ERASERS
   );
 }
 

@@ -273,7 +273,14 @@ describe("DayStore", () => {
       store.commitStroke(stroke("a"));
       store.commitStroke(stroke("b"));
       expect([...store.protectedIds(DAY)].sort()).toEqual(["a", "b"]);
-      store.settle(store.takeUnsent(), [{ id: "a", seq: 2 }, { id: "b", seq: 3 }], 10);
+      store.settle(
+        store.takeUnsent(),
+        [
+          { id: "a", seq: 2 },
+          { id: "b", seq: 3 },
+        ],
+        10,
+      );
       expect([...store.protectedIds(DAY)].sort()).toEqual(["a", "b"]);
       store.clearHistory(DAY);
       expect(store.protectedIds(DAY).size).toBe(0);

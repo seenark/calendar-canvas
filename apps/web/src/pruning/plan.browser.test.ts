@@ -123,7 +123,8 @@ describe("planPrune", () => {
         const penPoints = line(cx - 0.01, cy, cx + 0.01);
         strokes.push(pen({ id: `p${i}`, seq: ++seq, points: penPoints, size: 0.004 }));
       }
-      const points = pair === 1 ? line(cx - 0.02, cy, cx - 0.005) : line(cx - 0.012, cy, cx + 0.012);
+      const points =
+        pair === 1 ? line(cx - 0.02, cy, cx - 0.005) : line(cx - 0.012, cy, cx + 0.012);
       strokes.push(eraser({ id: `e${i}`, seq: ++seq, points, size: pair === 1 ? 0.01 : 0.03 }));
     }
     const ids = deleted(plan(strokes));

@@ -36,7 +36,9 @@ export function planPrune(input: PruneInput): PruneResult {
     if (!path) outlines.set(s.id, (path = strokeOutline(s)));
     return path;
   };
-  const eligible = strokes.filter((s) => s.receivedAt < now - MIN_AGE_MS && !protectedIds.has(s.id));
+  const eligible = strokes.filter(
+    (s) => s.receivedAt < now - MIN_AGE_MS && !protectedIds.has(s.id),
+  );
   const erasers = eligible.filter((s) => s.kind === "eraser");
   const pruned = new Set<string>();
 
