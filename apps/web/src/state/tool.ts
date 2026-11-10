@@ -5,7 +5,7 @@ import {
   unstable_withStorageValidator as withStorageValidator,
 } from "jotai/vanilla/utils";
 
-import { DEFAULT_PEN_COLOR, MAX_RECENT_COLORS } from "@/drawing/palette";
+import { DEFAULT_PEN_COLOR, MAX_RECENT_COLORS, isHexColor } from "@/drawing/palette";
 import { DEFAULT_ERASER_SIZE, DEFAULT_PEN_SIZE, isValidSize } from "@/drawing/sizes";
 import type { StrokeKind } from "@/drawing/stroke";
 
@@ -17,19 +17,22 @@ export const toolAtom = atom<Tool>("pen");
 export type PenSettings = { color: string; size: number };
 export type EraserSettings = { size: number };
 
-const isPenSettings = (v: unknown): v is PenSettings =>
+export const isPenSettings = (v: unknown): v is PenSettings =>
   typeof v === "object" &&
   v !== null &&
   "color" in v &&
-  typeof v.color === "string" &&
+  isHexColor(v.color) &&
   "size" in v &&
   isValidSize(v.size);
 
-const isEraserSettings = (v: unknown): v is EraserSettings =>
+export const isEraserSettings = (v: unknown): v is EraserSettings =>
   typeof v === "object" && v !== null && "size" in v && isValidSize(v.size);
 
-const isRecentColors = (v: unknown): v is string[] =>
-  Array.isArray(v) && v.length <= MAX_RECENT_COLORS && v.every((c) => typeof c === "string");
+export const isRecentColors = (v: unknown): v is string[] =>
+  Array.isArray(v) &&
+  v.length <= MAX_RECENT_COLORS &&
+  v.every(isHexColor) &&
+  new Set(v).size === v.length;
 
 const stored = <T>(key: string, initial: T, isValid: (v: unknown) => v is T) =>
   atomWithStorage(key, initial, withStorageValidator(isValid)(createJSONStorage<unknown>()), {

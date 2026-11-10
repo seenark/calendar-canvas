@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { MAX_SIZE, MIN_SIZE, SIZE_PRESETS, clampSize, isValidSize, sizeFromDrag } from "./sizes";
 
 describe("SIZE_PRESETS", () => {
-  it.each(["pen", "eraser"] as const)("has 5 ascending %s sizes inside (0, 0.2]", (kind) => {
+  it.each(["pen", "eraser"] as const)("has 5 ascending %s sizes inside the valid range", (kind) => {
     const sizes = SIZE_PRESETS[kind];
     expect(sizes).toHaveLength(5);
     expect([...sizes].sort((a, b) => a - b)).toEqual([...sizes]);
@@ -20,8 +20,10 @@ describe("clampSize", () => {
 });
 
 describe("isValidSize", () => {
-  it("accepts (0, 0.2] and rejects anything else", () => {
-    expect(isValidSize(0.2)).toBe(true);
+  it("accepts [MIN_SIZE, MAX_SIZE] and rejects anything else", () => {
+    expect(isValidSize(MAX_SIZE)).toBe(true);
+    expect(isValidSize(MIN_SIZE)).toBe(true);
+    expect(isValidSize(MIN_SIZE / 2)).toBe(false);
     expect(isValidSize(0)).toBe(false);
     expect(isValidSize(0.21)).toBe(false);
     expect(isValidSize("0.01")).toBe(false);

@@ -18,7 +18,7 @@ const DRAG_DOUBLE_PX = 80;
 export const clampSize = (size: number): number => Math.min(MAX_SIZE, Math.max(MIN_SIZE, size));
 
 export const isValidSize = (v: unknown): v is number =>
-  typeof v === "number" && v > 0 && v <= MAX_SIZE;
+  typeof v === "number" && v >= MIN_SIZE && v <= MAX_SIZE;
 
 /** `dy` is the finger's vertical travel in px since the long-press began. Up (negative) grows the size. */
 export const sizeFromDrag = (start: number, dy: number): number =>

@@ -16,6 +16,9 @@ export const DEFAULT_PEN_COLOR = PALETTE[0];
 
 export const MAX_RECENT_COLORS = 5;
 
+export const isHexColor = (v: unknown): v is string =>
+  typeof v === "string" && /^#[0-9A-Fa-f]{6}$/.test(v);
+
 /** Newest first, de-duplicated, capped at MAX_RECENT_COLORS. */
 export function pushRecentColor(recent: readonly string[], color: string): string[] {
   return [color, ...recent.filter((c) => c !== color)].slice(0, MAX_RECENT_COLORS);
