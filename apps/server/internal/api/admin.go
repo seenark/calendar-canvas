@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,15 +31,28 @@ type adminUser struct {
 	StrokeCount int64   `json:"strokeCount"`
 }
 
+// clientIP returns the rate-limit key for r. IPv6 addresses collapse to their /64, which one subscriber controls,
+// and an unparsable header falls back to the connection's address.
 func clientIP(r *http.Request) string {
-	if ip := r.Header.Get(clientIPHeader); ip != "" {
-		return ip
+	if addr, err := netip.ParseAddr(r.Header.Get(clientIPHeader)); err == nil {
+		return limitKey(addr)
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		return limitKey(addr)
 	}
 	return host
+}
+
+func limitKey(addr netip.Addr) string {
+	addr = addr.Unmap().WithZone("")
+	if addr.Is6() {
+		return netip.PrefixFrom(addr, 64).Masked().String()
+	}
+	return addr.String()
 }
 
 func adminLogin(svc *auth.Service) gin.HandlerFunc {
