@@ -24,6 +24,7 @@
     "format": "vp fmt",
     "staged": "vp staged",
     "dev:web": "vp run --filter web dev",
+    "test:browser": "vp run --filter web test:browser",
     "dev:server": "cd apps/server && go run ./cmd/server",
     "gen:types": "cd apps/server && go run github.com/gzuidhof/tygo@v0.2.21 generate && cd ../.. && vp fmt apps/web/src/api/types.ts",
     "docker:build": "docker compose build",
