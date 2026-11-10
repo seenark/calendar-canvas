@@ -41,6 +41,7 @@ func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service, conn *sql.DB) *g
 	userOnly := requireRole(svc, auth.RoleUser)
 	api.GET("/months/:month", userOnly, strokes.month)
 	api.POST("/strokes/ops", userOnly, strokes.ops)
+	api.POST("/days/:date/prune", userOnly, strokes.prune)
 
 	r.NoRoute(serveSPA(spa))
 	return r

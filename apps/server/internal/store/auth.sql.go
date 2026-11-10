@@ -97,6 +97,18 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 	return i, err
 }
 
+const purgeExpiredSessions = `-- name: PurgeExpiredSessions :execrows
+DELETE FROM sessions WHERE expires_at < ?
+`
+
+func (q *Queries) PurgeExpiredSessions(ctx context.Context, expiresAt int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, purgeExpiredSessions, expiresAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const upsertUser = `-- name: UpsertUser :one
 INSERT INTO users (id, google_sub, email, name, avatar_url, created_at, last_login_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)

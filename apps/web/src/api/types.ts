@@ -60,3 +60,12 @@ export interface OpResult {
 export interface OpsResponse {
   results: OpResult[];
 }
+/**
+ * PruneRequest soft-deletes the listed Strokes of one Day (Pruning). The Day is in the path.
+ */
+export interface PruneRequest {
+  deleteIds: string[];
+}
+export interface PruneResponse {
+  deleted: number /* int64 */;
+}

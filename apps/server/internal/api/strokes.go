@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -146,9 +147,9 @@ func (h *strokeHandlers) apply(ctx context.Context, userID string, ops []Op, poi
 			results = append(results, OpResult{ID: id, Seq: owner.Seq})
 			continue
 		case OpDelete:
-			err = q.DeleteStroke(ctx, store.DeleteStrokeParams{DeletedAt: &now, ID: id})
+			err = q.DeleteStroke(ctx, store.DeleteStrokeParams{DeletedAt: &now, ID: id, UserID: userID})
 		case OpRestore:
-			err = q.RestoreStroke(ctx, id)
+			err = q.RestoreStroke(ctx, store.RestoreStrokeParams{ID: id, UserID: userID})
 		}
 		if err != nil {
 			return nil, err
@@ -156,6 +157,37 @@ func (h *strokeHandlers) apply(ctx context.Context, userID string, ops []Op, poi
 		results = append(results, OpResult{ID: id})
 	}
 	return results, tx.Commit()
+}
+
+func (h *strokeHandlers) prune(c *gin.Context) {
+	day := c.Param("date")
+	if _, err := time.Parse(time.DateOnly, day); err != nil {
+		abortError(c, http.StatusBadRequest, "invalid_date", "date must be YYYY-MM-DD")
+		return
+	}
+	var req PruneRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		abortBindError(c, err)
+		return
+	}
+	ids, err := json.Marshal(req.DeleteIDs)
+	if err != nil {
+		slog.Error("encode prune ids", "error", err)
+		abortError(c, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+
+	// One UPDATE statement is one transaction: every matching row is deleted or none.
+	now := time.Now().UnixMilli()
+	deleted, err := h.q.PruneDayStrokes(c.Request.Context(), store.PruneDayStrokesParams{
+		DeletedAt: &now, UserID: currentUserID(c), Day: day, Ids: string(ids),
+	})
+	if err != nil {
+		slog.Error("prune day strokes", "error", err)
+		abortError(c, http.StatusInternalServerError, "internal", "internal error")
+		return
+	}
+	c.JSON(http.StatusOK, PruneResponse{Deleted: deleted})
 }
 
 // check validates what binding tags cannot express and returns the decoded points of an add.

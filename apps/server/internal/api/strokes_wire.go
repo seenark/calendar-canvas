@@ -59,3 +59,12 @@ type OpResult struct {
 type OpsResponse struct {
 	Results []OpResult `json:"results"`
 }
+
+// PruneRequest soft-deletes the listed Strokes of one Day (Pruning). The Day is in the path.
+type PruneRequest struct {
+	DeleteIDs []string `json:"deleteIds" binding:"required,min=1,max=1000,dive,uuid"`
+}
+
+type PruneResponse struct {
+	Deleted int64 `json:"deleted"`
+}
