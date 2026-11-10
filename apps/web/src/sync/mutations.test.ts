@@ -8,7 +8,7 @@ import { encodePoints } from "@/ink/codec";
 import { DayStore } from "./day-store";
 import { confirmed, stroke } from "./fixtures";
 import { STROKE_OPS_KEY, sendOps, strokeOpsDefaults, toWireOp } from "./mutations";
-import { bindMonthsToStore, decodeMonth, monthKey, type MonthStrokes } from "./queries";
+import { bindMonthsToStore, decodeMonth, monthKey, monthQuery, type MonthStrokes } from "./queries";
 
 const DAY = "2026-11-10";
 const MONTH = "2026-11";
@@ -24,6 +24,30 @@ function setup() {
   return { queryClient, store };
 }
 
+/** Lets queued microtasks and I/O callbacks run, to prove that nothing more was sent. */
+const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** Routes `fetch`: every POST waits for the test to answer it, every GET is answered by `get`. */
+function server(get: (call: number) => Promise<Response> | Response) {
+  const posts: {
+    ops: { op: string; id?: string; stroke?: { id: string } }[];
+    reply: (r: Response) => void;
+  }[] = [];
+  let gets = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string, init: RequestInit) => {
+      if (init?.method !== "POST") return Promise.resolve(get(gets++));
+      const reply = Promise.withResolvers<Response>();
+      posts.push({ ...JSON.parse(init.body as string), reply: reply.resolve });
+      return reply.promise;
+    }),
+  );
+  return { posts, gets: () => gets };
+}
+
+const opIds = (post: { ops: { id?: string; stroke?: { id: string } }[] }) =>
+  post.ops.map((o) => o.stroke?.id ?? o.id);
 const respond = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -47,6 +71,23 @@ describe("wire format", () => {
       op: "delete",
       id: "a",
     });
+  });
+});
+
+describe("month decoding", () => {
+  it("skips an undecodable Stroke and keeps the rest", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const good = toWireOp({ op: "add", stroke: stroke("good"), localSeq: 0, day: DAY }).stroke!;
+    const bad = { ...good, id: "bad", points: "AA==" };
+    const days = decodeMonth({
+      strokes: [
+        { ...bad, seq: 1, receivedAt: 1 },
+        { ...good, seq: 2, receivedAt: 2 },
+      ],
+    });
+    expect(days[DAY]?.map((s) => s.id)).toEqual(["good"]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("bad"), expect.anything());
+    warn.mockRestore();
   });
 });
 
@@ -90,6 +131,80 @@ describe("sending", () => {
     );
   });
 
+  it("sends one batch at a time, each reading the Ops queued so far", async () => {
+    const { store } = setup();
+    const { posts } = server(() => respond({ strokes: [] }));
+    store.commitStroke(stroke("a"));
+    store.commitStroke(stroke("b"));
+    store.undo(DAY);
+    await flush();
+    expect(posts).toHaveLength(1);
+    expect(opIds(posts[0]!)).toEqual(["a"]);
+    posts[0]!.reply(respond({ results: [{ id: "a", seq: 1 }] }));
+    await vi.waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]!.ops.map((o) => o.op)).toEqual(["add", "delete"]);
+    expect(opIds(posts[1]!)).toEqual(["b", "b"]);
+    posts[1]!.reply(respond({ results: [{ id: "b", seq: 2 }, { id: "b" }] }));
+    await vi.waitFor(() => expect(store.takeUnsent()).toEqual([]));
+    expect(posts).toHaveLength(2);
+  });
+
+  it("sends nothing after a failed batch and keeps every Op in order for the next trigger", async () => {
+    const { queryClient, store } = setup();
+    const { posts } = server(() => respond({ strokes: [] }));
+    store.commitStroke(stroke("a"));
+    store.undo(DAY);
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    posts[0]!.reply(respond({ error: { code: "internal" } }, 500));
+    await vi.waitFor(() =>
+      expect(queryClient.getMutationCache().getAll()[0]?.state.status).toBe("error"),
+    );
+    await flush();
+    expect(posts).toHaveLength(1);
+    store.commitStroke(stroke("b"));
+    await vi.waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]!.ops.map((o) => o.op)).toEqual(["add", "delete", "add"]);
+    expect(opIds(posts[1]!)).toEqual(["a", "a", "b"]);
+  });
+
+  it("keeps a Stroke confirmed while its month's first GET, which read before the commit, is in flight", async () => {
+    const { queryClient, store } = setup();
+    const late = Promise.withResolvers<Response>();
+    const s = stroke("a");
+    const stored = {
+      ...toWireOp({ op: "add", stroke: s, localSeq: 0, day: DAY }).stroke!,
+      seq: 1,
+      receivedAt: 1,
+    };
+    const { posts, gets } = server((call) =>
+      call === 0 ? late.promise : respond({ strokes: [stored] }),
+    );
+    void queryClient.prefetchQuery(monthQuery(MONTH));
+    store.commitStroke(s);
+    await vi.waitFor(() => expect(posts).toHaveLength(1));
+    posts[0]!.reply(respond({ results: [{ id: "a", seq: 1 }] }));
+    await vi.waitFor(() => expect(gets()).toBe(2));
+    late.resolve(respond({ strokes: [] }));
+    await vi.waitFor(() =>
+      expect(queryClient.getQueryData<MonthStrokes>(monthKey(MONTH))?.[DAY]).toHaveLength(1),
+    );
+    expect(store.getSnapshot(DAY).strokes.map((x) => x.id)).toEqual(["a"]);
+  });
+
+  it("does not redraw when a refetch returns the same Strokes", async () => {
+    const { queryClient, store } = setup();
+    const stored = {
+      ...toWireOp({ op: "add", stroke: stroke("x"), localSeq: 0, day: DAY }).stroke!,
+      seq: 1,
+      receivedAt: 1,
+    };
+    server(() => respond({ strokes: [stored] }));
+    await queryClient.fetchQuery(monthQuery(MONTH));
+    const before = store.getSnapshot(DAY);
+    expect(before.strokes.map((x) => x.id)).toEqual(["x"]);
+    await queryClient.refetchQueries({ queryKey: monthKey(MONTH) });
+    expect(store.getSnapshot(DAY)).toBe(before);
+  });
   it("returns the Ops to the unsent set when the batch fails", async () => {
     const { queryClient, store } = setup();
     vi.stubGlobal(
