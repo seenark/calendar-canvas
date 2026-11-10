@@ -6,7 +6,10 @@ import { fetchMe } from "@/lib/api";
 import { isDayKey, isYearMonth, monthOfDay, toDayKey } from "@/lib/date";
 import { MonthView } from "@/month/month-view";
 
-const TRANSITION = { default: { duration: 0.2 }, layout: { type: "spring", duration: 0.4, bounce: 0 } } as const;
+const TRANSITION = {
+  default: { duration: 0.2 },
+  layout: { type: "spring", duration: 0.4, bounce: 0 },
+} as const;
 const INSTANT = { duration: 0 } as const;
 
 export const Route = createFileRoute("/_calendar")({

@@ -99,7 +99,13 @@ export function DrawingPage({ date }: { date: string }) {
     <div className="fixed inset-0 z-50 mx-auto flex max-w-[430px] flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
       <motion.div className="bg-background absolute inset-0 -z-10" {...FADE} />
       <motion.header className="flex h-12 shrink-0 items-center gap-2 px-2" {...FADE}>
-        <Button variant="ghost" size="icon-lg" className="size-11" aria-label="กลับ" onClick={goBack}>
+        <Button
+          variant="ghost"
+          size="icon-lg"
+          className="size-11"
+          aria-label="กลับ"
+          onClick={goBack}
+        >
           <ArrowLeft />
         </Button>
         <h1 className="text-sm font-bold">{formatThaiDate(parseDay(date)!)}</h1>
