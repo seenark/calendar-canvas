@@ -1,8 +1,6 @@
 import { Toaster } from "@calendar-canvas/ui/components/sonner";
 import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
-import Header from "@/components/header";
 import { ThemeProvider } from "@/components/theme-provider";
 
 import "../index.css";
@@ -14,17 +12,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
       {
-        title: "calendar-canvas",
+        title: "Calendar Canvas",
       },
       {
         name: "description",
-        content: "calendar-canvas is a web application",
-      },
-    ],
-    links: [
-      {
-        rel: "icon",
-        href: "/favicon.ico",
+        content: "Handwritten calendar PWA",
       },
     ],
   }),
@@ -35,18 +27,16 @@ function RootComponent() {
     <>
       <HeadContent />
       <ThemeProvider
-        attribute="class"
-        defaultTheme="dark"
+        attribute="data-theme"
+        defaultTheme="system"
+        enableSystem
         disableTransitionOnChange
-        storageKey="vite-ui-theme"
       >
-        <div className="grid grid-rows-[auto_1fr] h-svh">
-          <Header />
+        <div className="app-shell">
           <Outlet />
         </div>
         <Toaster richColors />
       </ThemeProvider>
-      <TanStackRouterDevtools position="bottom-left" />
     </>
   );
 }
