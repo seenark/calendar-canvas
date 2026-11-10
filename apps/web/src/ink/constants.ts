@@ -6,3 +6,6 @@ export const MAX_STROKE_POINTS = 4000;
 
 /** RDP epsilon, as a fraction of the Day's width. */
 export const DEFAULT_SIMPLIFY_EPSILON = 0.0005;
+
+/** Largest pressure deviation from linear interpolation that RDP may drop, at the default epsilon. */
+export const PRESSURE_EPSILON = 0.05;

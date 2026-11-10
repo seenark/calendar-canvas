@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
-import { DAY_ASPECT } from "./constants";
+import { DAY_ASPECT, MAX_STROKE_POINTS } from "./constants";
 import type { InkPoint } from "./point";
-import { distanceToSegment, simplify } from "./rdp";
+import { distanceToSegment, fitToLimit, simplify } from "./rdp";
 
 function noisyCurve(n: number): InkPoint[] {
   let seed = 7;
@@ -67,6 +67,36 @@ describe("simplify", () => {
     expect(simplify(points, 0.00055)).toHaveLength(2);
   });
 
+  it("keeps a pressure peak on a straight Stroke when pressure matters", () => {
+    const line = Array.from({ length: 21 }, (_, i) => ({
+      x: i / 20,
+      y: 0.5,
+      pressure: i === 10 ? 0.9 : 0.3,
+    }));
+    const out = simplify(line, 0.0005, true);
+    expect(out).toContain(line[10]);
+    expect(out.every((p) => p.pressure === 0.3 || p === line[10])).toBe(true);
+    expect(out.length).toBeLessThan(line.length);
+  });
+
+  it("ignores pressure unless asked", () => {
+    const line = Array.from({ length: 21 }, (_, i) => ({
+      x: i / 20,
+      y: 0.5,
+      pressure: i === 10 ? 0.9 : 0.3,
+    }));
+    expect(simplify(line, 0.0005)).toEqual([line[0], line[20]]);
+  });
+
+  it("drops pressure wiggles below PRESSURE_EPSILON", () => {
+    const line = Array.from({ length: 21 }, (_, i) => ({
+      x: i / 20,
+      y: 0.5,
+      pressure: 0.5 + (i % 2 ? 0.02 : -0.02),
+    }));
+    expect(simplify(line, 0.0005, true)).toEqual([line[0], line[20]]);
+  });
+
   it("keeps both ends of a closed loop", () => {
     const loop = [
       { x: 0.2, y: 0.2 },
@@ -78,5 +108,43 @@ describe("simplify", () => {
     expect(out[0]).toBe(loop[0]);
     expect(out.at(-1)).toBe(loop[3]);
     expect(out.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("fitToLimit", () => {
+  it("fits a pressure-rich collinear Stroke under MAX_STROKE_POINTS, keeping both ends, in under 500 ms", () => {
+    const points = Array.from({ length: 10_000 }, (_, i) => ({
+      x: i / 9_999,
+      y: 0.5,
+      pressure: i % 2 ? 0.8 : 0.2,
+    }));
+    const start = performance.now();
+    const out = fitToLimit(points, true);
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(out.length).toBeLessThanOrEqual(MAX_STROKE_POINTS);
+    expect(out[0]).toBe(points[0]);
+    expect(out.at(-1)).toBe(points.at(-1));
+  });
+
+  it("fits a 4,000-point curved pressure Stroke in under 50 ms", () => {
+    const points = Array.from({ length: 4_000 }, (_, i) => {
+      const t = i / 3_999;
+      return {
+        x: 0.1 + 0.8 * t,
+        y: 0.5 + 0.3 * Math.sin(t * 6),
+        pressure: 0.5 + 0.3 * Math.sin(t * 9),
+      };
+    });
+    const start = performance.now();
+    const out = fitToLimit(points, true);
+    expect(performance.now() - start).toBeLessThan(50);
+    expect(out.length).toBeLessThanOrEqual(MAX_STROKE_POINTS);
+    expect(out[0]).toBe(points[0]);
+    expect(out.at(-1)).toBe(points.at(-1));
+  });
+
+  it("matches simplify at the default epsilon when the Stroke already fits", () => {
+    const points = noisyCurve(500);
+    expect(fitToLimit(points, true)).toEqual(simplify(points, undefined, true));
   });
 });
