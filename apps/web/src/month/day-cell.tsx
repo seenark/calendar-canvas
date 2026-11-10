@@ -14,7 +14,11 @@ export const dayLayoutId = (day: string) => `day-${day}`;
 export function isDayCellOnScreen(day: string): boolean {
   const cell = document.querySelector(`[data-day-cell="${day}"]`);
   const scroller = cell?.closest("[data-month-scroll]");
-  return !!cell && !!scroller && rectsIntersect(cell.getBoundingClientRect(), scroller.getBoundingClientRect());
+  return (
+    !!cell &&
+    !!scroller &&
+    rectsIntersect(cell.getBoundingClientRect(), scroller.getBoundingClientRect())
+  );
 }
 
 export function DayCell({ day, isToday }: { day: string; isToday: boolean }) {
