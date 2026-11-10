@@ -26,3 +26,9 @@ DELETE FROM sessions WHERE token_hash = ?;
 
 -- name: PurgeExpiredSessions :execrows
 DELETE FROM sessions WHERE expires_at < ?;
+
+-- name: ListUsers :many
+SELECT * FROM users ORDER BY created_at, id;
+
+-- name: DeleteUser :execrows
+DELETE FROM users WHERE id = ?;

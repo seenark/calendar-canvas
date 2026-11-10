@@ -11,6 +11,7 @@ import (
 
 	"github.com/seenark/calendar-canvas/apps/server/internal/auth"
 	"github.com/seenark/calendar-canvas/apps/server/internal/config"
+	"github.com/seenark/calendar-canvas/apps/server/internal/store"
 )
 
 const healthPath = "/api/health"
@@ -42,6 +43,12 @@ func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service, conn *sql.DB) *g
 	api.GET("/months/:month", userOnly, strokes.month)
 	api.POST("/strokes/ops", userOnly, strokes.ops)
 	api.POST("/days/:date/prune", userOnly, strokes.prune)
+
+	q := store.New(conn)
+	api.POST("/admin/login", adminLogin(svc))
+	admin := api.Group("/admin", requireRole(svc, auth.RoleAdmin))
+	admin.GET("/users", listUsers(q))
+	admin.DELETE("/users/:id", deleteUser(q))
 
 	r.NoRoute(serveSPA(spa))
 	return r

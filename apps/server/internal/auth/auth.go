@@ -78,6 +78,8 @@ type Service struct {
 	oauth    oauth2.Config
 	verifier *oidc.IDTokenVerifier
 	q        *store.Queries
+
+	adminLimiter *limiter
 }
 
 // New discovers the OIDC provider at issuer. endpoint is the OAuth2 authorize and token URL pair.
@@ -97,6 +99,8 @@ func New(ctx context.Context, cfg config.Config, issuer string, endpoint oauth2.
 		},
 		verifier: provider.Verifier(&oidc.Config{ClientID: cfg.GoogleClientID}),
 		q:        q,
+
+		adminLimiter: newLimiter(adminAttempts, adminWindow),
 	}, nil
 }
 
@@ -207,7 +211,7 @@ func (s *Service) FinishLogin(ctx context.Context, r *http.Request) (*http.Cooki
 	if err != nil {
 		return nil, "", &LoginError{CodeSignInFailed, fmt.Errorf("create session: %w", err)}
 	}
-	return s.sessionCookie(token), st.Return, nil
+	return s.sessionCookie(token, sessionTTL), st.Return, nil
 }
 
 // Authenticate resolves the session cookie. It returns a nil Identity for a missing, malformed or expired
@@ -236,6 +240,12 @@ func (s *Service) Authenticate(ctx context.Context, r *http.Request) (*Identity,
 		if err != nil {
 			return nil, nil, err
 		}
+		if sess.Role == RoleUser && !s.cfg.AllowedEmails.Allows(user.Email) {
+			if err := s.q.DeleteSession(ctx, hash); err != nil {
+				return nil, nil, err
+			}
+			return nil, nil, nil
+		}
 		identity.User = &user
 	}
 
@@ -247,7 +257,7 @@ func (s *Service) Authenticate(ctx context.Context, r *http.Request) (*Identity,
 		slog.Error("renew session", "error", err)
 		return identity, nil, nil
 	}
-	return identity, s.sessionCookie(token), nil
+	return identity, s.sessionCookie(token, sessionTTL), nil
 }
 
 func (s *Service) Logout(ctx context.Context, r *http.Request) error {
@@ -258,8 +268,8 @@ func (s *Service) Logout(ctx context.Context, r *http.Request) error {
 	return s.q.DeleteSession(ctx, hashToken(token))
 }
 
-func (s *Service) sessionCookie(token []byte) *http.Cookie {
-	return s.cookie(SessionCookie, base64.RawURLEncoding.EncodeToString(token), "/", int(sessionTTL/time.Second))
+func (s *Service) sessionCookie(token []byte, ttl time.Duration) *http.Cookie {
+	return s.cookie(SessionCookie, base64.RawURLEncoding.EncodeToString(token), "/", int(ttl/time.Second))
 }
 
 func (s *Service) cookie(name, value, path string, maxAgeSeconds int) *http.Cookie {
