@@ -37,7 +37,7 @@ function LoginPage() {
           <p className="text-sm">ปฏิทินที่เขียนด้วยลายมือของคุณเอง</p>
           {error && (
             <p role="alert" className="text-destructive text-sm">
-              {ERROR_MESSAGES[error] ?? ERROR_MESSAGES.sign_in_failed}
+              {Object.hasOwn(ERROR_MESSAGES, error) ? ERROR_MESSAGES[error] : ERROR_MESSAGES.sign_in_failed}
             </p>
           )}
           <div className="paper-shadow">

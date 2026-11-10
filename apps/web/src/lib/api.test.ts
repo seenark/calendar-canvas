@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { ApiError, api } from "./api";
+import { QueryClient } from "@tanstack/react-query";
+
+import { ApiError, api, fetchMe } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -33,5 +35,20 @@ describe("api", () => {
   it("returns undefined for 204", async () => {
     stubFetch(new Response(null, { status: 204 }));
     await expect(api("/api/auth/logout", { method: "POST" })).resolves.toBeUndefined();
+  });
+});
+
+describe("fetchMe", () => {
+  it("returns null for a 401 and rethrows other failures", async () => {
+    stubFetch(Response.json({ error: { code: "unauthorized", message: "x" } }, { status: 401 }));
+    expect(await fetchMe(new QueryClient())).toBeNull();
+
+    stubFetch(Response.json({ error: { code: "internal", message: "x" } }, { status: 500 }));
+    await expect(fetchMe(new QueryClient())).rejects.toMatchObject({ status: 500 });
+  });
+
+  it("returns the identity of a signed-in session", async () => {
+    stubFetch(Response.json({ user: null, role: "admin" }));
+    expect(await fetchMe(new QueryClient())).toEqual({ user: null, role: "admin" });
   });
 });

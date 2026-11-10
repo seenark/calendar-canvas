@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query";
+import { queryOptions, type QueryClient } from "@tanstack/react-query";
 
 export class ApiError extends Error {
   constructor(
@@ -36,4 +36,29 @@ export const meQuery = queryOptions({
   queryKey: ["me"],
   queryFn: () => api<Me>("/api/me"),
   retry: false,
+});
+
+/** The signed-in identity, or null when there is no session. */
+export async function fetchMe(queryClient: QueryClient): Promise<Me | null> {
+  try {
+    return await queryClient.ensureQueryData(meQuery);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return null;
+    throw err;
+  }
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  avatarUrl: string | null;
+  createdAt: number;
+  lastLoginAt: number | null;
+  strokeCount: number;
+}
+
+export const adminUsersQuery = queryOptions({
+  queryKey: ["admin", "users"],
+  queryFn: () => api<AdminUser[]>("/api/admin/users"),
 });
