@@ -57,10 +57,7 @@ export function ColorDrawer() {
 
   return (
     <Drawer open={open} onOpenChange={setOpen}>
-      <DrawerTrigger
-        aria-label="สี"
-        className={cn(buttonVariants({ variant: "ghost" }), "size-11")}
-      >
+      <DrawerTrigger aria-label="สี" className={cn(buttonVariants({ variant: "ghost" }), "size-11")}>
         <span
           className="border-border size-6 rounded-full border"
           style={{ backgroundColor: pen.color }}

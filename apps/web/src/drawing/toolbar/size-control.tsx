@@ -11,7 +11,13 @@ const TAP_SLOP_PX = 10;
 /** shortcut: the dot is capped at the 44px target, so the largest Eraser presets show smaller than real. */
 const MAX_DOT_PX = 40;
 
-type Gesture = { startY: number; startSize: number; timer: number; fineTuning: boolean; moved: boolean };
+type Gesture = {
+  startY: number;
+  startSize: number;
+  timer: number;
+  fineTuning: boolean;
+  moved: boolean;
+};
 
 function SizeDot({
   size,
@@ -104,10 +110,7 @@ export function SizeControl({ paperWidth }: { paperWidth: number }) {
               type="button"
               aria-label={`ขนาด ${preset}`}
               aria-pressed={preset === size}
-              className={cn(
-                "grid size-11 place-items-center",
-                preset === size && "bg-muted",
-              )}
+              className={cn("grid size-11 place-items-center", preset === size && "bg-muted")}
               onClick={() => {
                 setSize(preset);
                 setTrayOpen(false);
