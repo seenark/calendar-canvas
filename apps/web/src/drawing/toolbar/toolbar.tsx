@@ -10,7 +10,7 @@ import { SizeControl } from "./size-control";
 const TOOLS = [
   { tool: "pen", label: "ปากกา", Icon: PenLine },
   { tool: "eraser", label: "ยางลบ", Icon: Eraser },
-] as const satisfies readonly { tool: Tool }[];
+] as const satisfies readonly { tool: Tool; label: string; Icon: typeof PenLine }[];
 
 /** Sits above the safe area. Every target is 44px square so one thumb reaches all of it. */
 export function Toolbar({ paperWidth }: { paperWidth: number }) {
