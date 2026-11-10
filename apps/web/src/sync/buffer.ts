@@ -22,6 +22,8 @@ export function persistBuffer(store: DayStore): () => void {
     const signature = snapshot.ops.map((op) => op.localSeq).join();
     if (signature === written) return;
     written = signature;
-    set(BUFFER_KEY, snapshot).catch((error) => console.warn("Could not save the unsent Ops", error));
+    set(BUFFER_KEY, snapshot).catch((error) =>
+      console.warn("Could not save the unsent Ops", error),
+    );
   });
 }
