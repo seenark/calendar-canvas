@@ -1,27 +1,32 @@
 name: calendar-canvas
 
 services:
-  web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      secrets:
-        - web_env
-    init: true
+  app:
+    build: .
     ports:
-      - "3001:80"
+      - "127.0.0.1:8080:8080"
     env_file:
-      - path: apps/web/.env
+      - path: .env
         required: false
+    volumes:
+      - data:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      test: ["CMD", "/server", "healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
     restart: unless-stopped
 
-# BuildKit makes these available only while install/build commands run.
-secrets:
-  web_env:
-    file: apps/web/.env
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.7
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  data:

@@ -24,6 +24,7 @@
     "format": "vp fmt",
     "staged": "vp staged",
     "dev:web": "vp run --filter web dev",
+    "dev:server": "cd apps/server && go run ./cmd/server",
     "docker:build": "docker compose build",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
