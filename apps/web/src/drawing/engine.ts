@@ -7,6 +7,7 @@ import { uuidv7 } from "@/lib/uuid";
 import { eraserAtom, penAtom, toolAtom } from "@/state/tool";
 
 import { REF_HEIGHT, REF_WIDTH, strokePath } from "./outline";
+import { drawStrokes, fillOutline, strokeOutline } from "./render";
 import type { Stroke, StrokeKind } from "./stroke";
 import {
   backingRatio,
@@ -108,7 +109,7 @@ export class DrawingEngine {
       prev.every((s, i) => s === strokes[i]);
     const added = appended ? strokes.slice(prev.length) : [];
     if (appended && added.every((s) => s.kind === "pen")) {
-      for (const s of added) this.fill(this.staticCtx, this.outline(s), s.color);
+      for (const s of added) fillOutline(this.staticCtx, this.outline(s), s.color);
       return;
     }
     this.staticDirty = true;
@@ -319,7 +320,7 @@ export class DrawingEngine {
       return;
     }
     const path = strokePath([...a.points, ...a.predicted], a.size, "pen", a.hasPressure, false);
-    this.fill(this.liveCtx, path, a.color);
+    fillOutline(this.liveCtx, path, a.color);
   };
 
   private finalize(a: Active): void {
@@ -341,7 +342,7 @@ export class DrawingEngine {
   private outline(stroke: Stroke): Path2D {
     let path = this.paths.get(stroke.id);
     if (!path) {
-      path = strokePath(stroke.points, stroke.size, stroke.kind, stroke.hasPressure, true);
+      path = strokeOutline(stroke);
       this.paths.set(stroke.id, path);
     }
     return path;
@@ -349,8 +350,7 @@ export class DrawingEngine {
 
   private redraw(): void {
     this.snapshotValid = false;
-    this.clear(this.staticCtx);
-    for (const s of this.strokes) this.fill(this.staticCtx, this.outline(s), s.color);
+    drawStrokes(this.staticCtx, this.strokes, (s) => this.outline(s));
   }
 
   /**
@@ -364,7 +364,7 @@ export class DrawingEngine {
     this.clear(ctx);
     ctx.globalCompositeOperation = "source-over";
     ctx.drawImage(this.snapshot, 0, 0);
-    this.fill(ctx, outline, null);
+    fillOutline(ctx, outline, null);
   }
 
   private takeSnapshot(): void {
@@ -395,14 +395,5 @@ export class DrawingEngine {
   private clear(ctx: CanvasRenderingContext2D): void {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  }
-
-  /** A null colour is the Eraser: it removes what is already on the canvas. */
-  private fill(ctx: CanvasRenderingContext2D, path: Path2D, color: string | null): void {
-    const scale = ctx.canvas.width / REF_WIDTH;
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.globalCompositeOperation = color === null ? "destination-out" : "source-over";
-    if (color !== null) ctx.fillStyle = color;
-    ctx.fill(path);
   }
 }
