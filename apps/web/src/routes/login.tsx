@@ -1,6 +1,8 @@
 import { Button } from "@calendar-canvas/ui/components/button";
 import { createFileRoute } from "@tanstack/react-router";
 
+import { signInUrl } from "@/lib/api";
+
 interface LoginSearch {
   return?: string;
   error?: string;
@@ -27,7 +29,7 @@ function LoginPage() {
   const { return: returnPath, error } = Route.useSearch();
 
   const signIn = () => {
-    window.location.href = "/api/auth/google/start?return=" + encodeURIComponent(returnPath ?? "/");
+    window.location.href = signInUrl(returnPath ?? "/");
   };
 
   return (

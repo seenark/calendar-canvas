@@ -29,6 +29,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.status === 204 ? (undefined as T) : res.json();
 }
 
+/** Where the Google sign-in starts and where it sends the User back to. */
+export const signInUrl = (returnPath: string): string =>
+  "/api/auth/google/start?return=" + encodeURIComponent(returnPath);
+
 export interface Me {
   user: { id: string; email: string; name: string | null; avatarUrl: string | null } | null;
   role: "user" | "admin";
