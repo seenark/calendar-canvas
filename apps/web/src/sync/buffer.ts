@@ -18,6 +18,10 @@ export async function restoreBuffer(store: DayStore): Promise<boolean> {
 
 let holds = 0;
 let onRelease = () => {};
+let writeNow = () => Promise.resolve();
+
+/** Resolves once every change made so far is in IndexedDB. A failed write is logged, not thrown. */
+export const persistNow = (): Promise<void> => writeNow();
 
 /**
  * Keeps settled Ops in the saved record until the returned function runs. A settled Op leaves the buffer only
@@ -63,9 +67,14 @@ export function persistBuffer(store: DayStore): () => void {
     });
   };
   onRelease = write;
+  writeNow = () => {
+    write();
+    return queue;
+  };
   const unsubscribe = store.subscribe(write);
   return () => {
     unsubscribe();
     onRelease = () => {};
+    writeNow = () => Promise.resolve();
   };
 }

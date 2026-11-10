@@ -21,6 +21,7 @@ import {
   queryCachePersistOptions,
 } from "./sync/persister";
 import { bindMonthsToStore } from "./sync/queries";
+import { watchSession } from "./sync/session";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -77,6 +78,7 @@ if (!rootElement.innerHTML) {
     adoptRestoredStrokeOps(queryClient, dayStore, bufferRestored);
     void queryClient.resumePausedMutations();
     startFlushing(dayStore, () => sendOps(queryClient, dayStore));
+    watchSession(queryClient, dayStore);
     sendOps(queryClient, dayStore);
   };
   root.render(
