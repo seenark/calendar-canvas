@@ -61,3 +61,6 @@ coverage
 .cache
 tmp
 temp
+
+# local code index
+.codegraph/
