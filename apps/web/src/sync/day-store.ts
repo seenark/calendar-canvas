@@ -3,7 +3,7 @@ import type { Stroke } from "@/drawing/stroke";
 
 import { applyResults } from "./apply";
 import { composeDay } from "./compose";
-import type { ConfirmedStroke, Op, PendingOp, SentOp } from "./ops";
+import { opStrokeId, type ConfirmedStroke, type Op, type PendingOp, type SentOp } from "./ops";
 import { UndoHistory } from "./undo";
 
 export type DaySnapshot = {
@@ -56,6 +56,17 @@ export class DayStore {
     for (const s of this.days.values()) n += s.pending.length;
     return n;
   };
+
+  /** The Day's server-confirmed Strokes in ascending `seq`, whatever the Overlay does to them. */
+  confirmedStrokes(day: string): readonly ConfirmedStroke[] {
+    return this.state(day).confirmed;
+  }
+
+  /** Ids the Day's Pending ops or undo and redo stacks name. Pruning must leave these alone. */
+  protectedIds(day: string): Set<string> {
+    const s = this.state(day);
+    return new Set([...s.pending.map(opStrokeId), ...s.history.ids()]);
+  }
 
   /** The Stroke becomes a pending `add` and the newest undo step. */
   commitStroke(stroke: Stroke): void {

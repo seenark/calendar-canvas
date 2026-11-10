@@ -13,6 +13,11 @@ export class UndoHistory {
     return this.undone.length > 0;
   }
 
+  /** Every id on either stack. */
+  ids(): string[] {
+    return [...this.done, ...this.undone];
+  }
+
   /** A new Stroke ends any redo chain and drops the oldest step past the cap. */
   record(id: string): void {
     this.done.push(id);
