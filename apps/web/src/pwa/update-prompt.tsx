@@ -42,7 +42,7 @@ export function UpdatePrompt() {
   const registration = useRef<ServiceWorkerRegistration | undefined>(undefined);
   const [activated, setActivated] = useState(false);
   const {
-    needRefresh: [needRefresh, setNeedRefresh],
+    needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW: (_url, r) => {
