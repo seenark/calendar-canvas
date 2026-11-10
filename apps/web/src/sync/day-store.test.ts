@@ -150,4 +150,20 @@ describe("DayStore", () => {
     store.undo(DAY);
     expect(calls).toBe(1);
   });
+
+  it("counts pending ops across Days and notifies when the count changes without a visible change", () => {
+    const store = new DayStore();
+    let calls = 0;
+    store.subscribe(() => calls++);
+    store.commitStroke(stroke("a"));
+    store.undo(DAY);
+    expect(store.pendingCount()).toBe(2);
+    const snapshot = store.getSnapshot(DAY);
+    calls = 0;
+    store["days"].get(DAY)!.pending.length = 0;
+    store.setConfirmed(DAY, []);
+    expect(store.pendingCount()).toBe(0);
+    expect(calls).toBe(1);
+    expect(store.getSnapshot(DAY)).toBe(snapshot);
+  });
 });
