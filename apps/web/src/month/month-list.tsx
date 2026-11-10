@@ -2,13 +2,21 @@ import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { monthIndex, toDayKey, yearMonthOfIndex } from "@/lib/date";
+import { monthIndex, yearMonthOfIndex } from "@/lib/date";
+import { useToday } from "@/lib/use-today";
 import { useMonths } from "@/sync/queries";
 
-import { HEADING_HEIGHT, MONTH_RANGE, monthItemHeight } from "./layout";
+import { rememberMonth } from "./last-month";
+import {
+  HEADING_HEIGHT,
+  monthItemHeight,
+  WINDOW_COUNT,
+  windowContains,
+  windowStart,
+} from "./layout";
 import { MonthItem } from "./month-item";
 
-const COUNT = 2 * MONTH_RANGE + 1;
+const COUNT = WINDOW_COUNT;
 const URL_DEBOUNCE_MS = 300;
 
 /**
@@ -25,15 +33,21 @@ export function MonthList({
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  const [base] = useState(() => monthIndex(initialMonth));
+  const [first, setFirst] = useState(() => windowStart(monthIndex(initialMonth)));
   const visibleMonth = useRef(initialMonth);
   const reportedMonth = useRef(initialMonth);
+  const dayOpen = useRef(false);
   const urlTimer = useRef<number>(undefined);
-  const today = toDayKey(new Date());
+  const today = useToday();
 
-  const yearMonthAt = (index: number) => yearMonthOfIndex(base + index - MONTH_RANGE);
+  const yearMonthAt = (index: number) => yearMonthOfIndex(first + index);
   const indexOf = (yearMonth: string) =>
-    Math.min(COUNT - 1, Math.max(0, monthIndex(yearMonth) - base + MONTH_RANGE));
+    Math.min(COUNT - 1, Math.max(0, monthIndex(yearMonth) - first));
+
+  const publish = (yearMonth: string) => {
+    reportedMonth.current = yearMonth;
+    void navigate({ to: "/m/$yearMonth", params: { yearMonth }, replace: true });
+  };
 
   const virtualizer = useVirtualizer({
     count: COUNT,
@@ -61,18 +75,27 @@ export function MonthList({
     if (width === 0) return;
     virtualizer.measure();
     virtualizer.scrollToIndex(indexOf(visibleMonth.current), { align: "start" });
-  }, [width]);
+  }, [width, first]);
 
   useEffect(() => {
     if (routeMonth === undefined) {
       window.clearTimeout(urlTimer.current);
+      dayOpen.current = true;
       return;
     }
-    if (routeMonth === reportedMonth.current) return;
+    rememberMonth(routeMonth);
+    const returningFromDay = dayOpen.current;
+    dayOpen.current = false;
+    if (routeMonth === reportedMonth.current) {
+      if (returningFromDay && visibleMonth.current !== routeMonth) publish(visibleMonth.current);
+      return;
+    }
     reportedMonth.current = routeMonth;
     visibleMonth.current = routeMonth;
     window.clearTimeout(urlTimer.current);
-    virtualizer.scrollToIndex(indexOf(routeMonth), { align: "start" });
+    const target = monthIndex(routeMonth);
+    if (!windowContains(first, target)) setFirst(windowStart(target));
+    else virtualizer.scrollToIndex(indexOf(routeMonth), { align: "start" });
   }, [routeMonth]);
 
   useEffect(() => () => window.clearTimeout(urlTimer.current), []);
@@ -87,14 +110,17 @@ export function MonthList({
     if (routeMonth === undefined) return;
     window.clearTimeout(urlTimer.current);
     urlTimer.current = window.setTimeout(() => {
-      if (yearMonth === reportedMonth.current) return;
-      reportedMonth.current = yearMonth;
-      void navigate({ to: "/m/$yearMonth", params: { yearMonth }, replace: true });
+      if (yearMonth !== reportedMonth.current) publish(yearMonth);
     }, URL_DEBOUNCE_MS);
   };
 
   return (
-    <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+    <div
+      ref={scrollRef}
+      data-month-scroll
+      onScroll={onScroll}
+      className="min-h-0 flex-1 overflow-y-auto"
+    >
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {width > 0 &&
           virtualizer.getVirtualItems().map((item) => (
