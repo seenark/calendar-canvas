@@ -99,18 +99,18 @@ Check the app: `curl http://127.0.0.1:8080/api/health` returns `{"status":"ok"}`
 
 Compose passes `.env` to the app container. The server refuses to start when a required value is missing or invalid, and prints every problem.
 
-| Variable | Required | Meaning |
-| --- | --- | --- |
-| `APP_BASE_URL` | yes | Public origin, such as `https://cal.example.com`. No path. Sets the Google redirect URI and the `Origin` check. `https` turns on `Secure` cookies. |
-| `PORT` | no | Listen port in the container. Default `8080`. |
-| `DATABASE_PATH` | yes | SQLite file. Use `/data/app.db`, which lives on the `data` volume. |
-| `GOOGLE_CLIENT_ID` | yes | From [Google OAuth setup](#google-oauth-setup). |
-| `GOOGLE_CLIENT_SECRET` | yes | From the same page. |
-| `SESSION_SECRET` | yes | At least 32 bytes. Signs the sign-in state cookie. `openssl rand -base64 48` makes one. |
-| `ALLOWED_EMAILS` | yes | Who may sign in. See below. |
-| `ADMIN_USERNAME` | no | Admin user name. |
-| `ADMIN_PASSWORD_HASH` | no | argon2id hash of the Admin password. Admin sign-in is off without it. |
-| `TUNNEL_TOKEN` | for the tunnel | Read only by the `cloudflared` service. |
+| Variable               | Required       | Meaning                                                                                                                                            |
+| ---------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_BASE_URL`         | yes            | Public origin, such as `https://cal.example.com`. No path. Sets the Google redirect URI and the `Origin` check. `https` turns on `Secure` cookies. |
+| `PORT`                 | no             | Listen port in the container. Default `8080`.                                                                                                      |
+| `DATABASE_PATH`        | yes            | SQLite file. Use `/data/app.db`, which lives on the `data` volume.                                                                                 |
+| `GOOGLE_CLIENT_ID`     | yes            | From [Google OAuth setup](#google-oauth-setup).                                                                                                    |
+| `GOOGLE_CLIENT_SECRET` | yes            | From the same page.                                                                                                                                |
+| `SESSION_SECRET`       | yes            | At least 32 bytes. Signs the sign-in state cookie. `openssl rand -base64 48` makes one.                                                            |
+| `ALLOWED_EMAILS`       | yes            | Who may sign in. See below.                                                                                                                        |
+| `ADMIN_USERNAME`       | no             | Admin user name.                                                                                                                                   |
+| `ADMIN_PASSWORD_HASH`  | no             | argon2id hash of the Admin password. Admin sign-in is off without it.                                                                              |
+| `TUNNEL_TOKEN`         | for the tunnel | Read only by the `cloudflared` service.                                                                                                            |
 
 ### `ALLOWED_EMAILS`
 
@@ -144,6 +144,7 @@ ADMIN_PASSWORD_HASH='$argon2id$v=19$m=65536,t=3,p=2$c29tZXNhbHQ$aGFzaGhhc2g'
    ```
 
    With `APP_BASE_URL=https://cal.example.com`, that is `https://cal.example.com/api/auth/google/callback`. It must match exactly.
+
 5. Copy the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 The server asks for the `openid`, `email` and `profile` scopes. It rejects accounts whose email Google has not verified, and accounts not covered by `ALLOWED_EMAILS`.
@@ -243,10 +244,10 @@ A deleted stroke stays as a tombstone for 30 days. A daily job then removes it f
 
 GitHub Actions (`.github/workflows/release.yml`) builds `linux/amd64` and `linux/arm64` images and pushes them to `ghcr.io/seenark/calendar-canvas`.
 
-| Trigger | Tags |
-| --- | --- |
-| Push to `main` | `latest`, `sha-<commit>` |
-| Tag `v1.2.3` | `1.2.3`, `1.2`, `sha-<commit>` |
+| Trigger        | Tags                           |
+| -------------- | ------------------------------ |
+| Push to `main` | `latest`, `sha-<commit>`       |
+| Tag `v1.2.3`   | `1.2.3`, `1.2`, `sha-<commit>` |
 
 A new GHCR package is private. After the first publish, set it to public in the package settings so `docker compose pull` works without a login.
 
