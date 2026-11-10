@@ -102,7 +102,10 @@ export class DrawingEngine {
     const prev = this.strokes;
     this.strokes = strokes;
     if (this.staticDirty) return;
-    const appended = strokes.length >= prev.length && prev.every((s, i) => s === strokes[i]);
+    const appended =
+      this.active?.kind !== "eraser" &&
+      strokes.length >= prev.length &&
+      prev.every((s, i) => s === strokes[i]);
     const added = appended ? strokes.slice(prev.length) : [];
     if (appended && added.every((s) => s.kind === "pen")) {
       for (const s of added) this.fill(this.staticCtx, this.outline(s), s.color);

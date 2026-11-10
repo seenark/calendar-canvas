@@ -111,6 +111,34 @@ describe("DayStore", () => {
     expect(store.getSnapshot(DAY).revision).toBe(before + 1);
   });
 
+  it("keeps the revision when a refetch returns equal Strokes as new objects or only receivedAt changes", () => {
+    const store = new DayStore();
+    store.setConfirmed(DAY, [confirmed("a", 1), confirmed("b", 2)]);
+    const before = store.getSnapshot(DAY);
+    store.setConfirmed(DAY, [confirmed("a", 1), confirmed("b", 2)]);
+    store.setConfirmed(DAY, [
+      { ...confirmed("a", 1), receivedAt: 99 },
+      { ...confirmed("b", 2), receivedAt: 99 },
+    ]);
+    expect(store.getSnapshot(DAY)).toBe(before);
+  });
+
+  it("shows a Stroke once when a refetch confirms it while its add is still pending", () => {
+    const store = new DayStore();
+    store.commitStroke(stroke("a"));
+    store.setConfirmed(DAY, [confirmed("a", 1)]);
+    expect(ids(store)).toEqual(["a"]);
+  });
+
+  it("still redraws a Stroke on redo after its pending add and delete both left the pending list", () => {
+    const store = new DayStore();
+    store.commitStroke(stroke("a"));
+    store.undo(DAY);
+    store["days"].get(DAY)!.pending.length = 0;
+    store.redo(DAY);
+    expect(ids(store)).toEqual(["a"]);
+  });
+
   it("notifies subscribers until they unsubscribe and gives a stable snapshot between changes", () => {
     const store = new DayStore();
     let calls = 0;

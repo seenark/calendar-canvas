@@ -2,33 +2,46 @@ import type { Stroke } from "@/drawing/stroke";
 
 import { opStrokeId, type ConfirmedStroke, type PendingOp } from "./ops";
 
-const NO_DELETED: ReadonlyMap<string, ConfirmedStroke> = new Map();
+const NO_SEEN: ReadonlyMap<string, Stroke> = new Map();
+
+type Placed = { stroke: Stroke; group: 0 | 1; at: number };
 
 /**
- * The Day's picture. Confirmed Strokes in ascending `seq`, then the Overlay: ids whose last pending Op is
- * a `delete` are removed, ids whose last pending Op is a `restore` come back, pending adds are appended in
- * `localSeq` order. `deleted` is the session cache of Strokes the server has deleted, the only source of
- * their data for a restore.
+ * The Day's picture, each Stroke id once. Confirmed Strokes come first in ascending `seq`, then Strokes only
+ * the client knows (pending adds, or a restore of a Stroke the server never confirmed) in local order. A
+ * pending add for an id that is already confirmed is ignored, and repeated adds keep the first one's place.
+ * Then the Overlay applies: ids whose last pending Op is a `delete` are removed, ids whose last pending Op
+ * is a `restore` come back. `seen` is the session cache of every Stroke the Day store has held, the only
+ * source of data for a restore of a Stroke that is no longer confirmed or pending.
  */
 export function composeDay(
   confirmed: readonly ConfirmedStroke[],
   pending: readonly PendingOp[],
-  deleted: ReadonlyMap<string, ConfirmedStroke> = NO_DELETED,
+  seen: ReadonlyMap<string, Stroke> = NO_SEEN,
 ): Stroke[] {
   const ops = [...pending].sort((a, b) => a.localSeq - b.localSeq);
-  const last = new Map<string, PendingOp["op"]>();
-  for (const p of ops) last.set(opStrokeId(p), p.op);
+  const last = new Map<string, PendingOp>();
+  for (const p of ops) last.set(opStrokeId(p), p);
 
-  const base = [...confirmed];
-  const present = new Set(base.map((s) => s.id));
-  for (const [id, op] of last) {
-    const stroke = deleted.get(id);
-    if (op === "restore" && stroke && !present.has(id)) base.push(stroke);
-  }
-  base.sort((a, b) => a.seq - b.seq);
-
-  const picture: Stroke[] = base.filter((s) => last.get(s.id) !== "delete");
+  const placed = new Map<string, Placed>();
+  for (const c of confirmed)
+    if (!placed.has(c.id)) placed.set(c.id, { stroke: c, group: 0, at: c.seq });
   for (const p of ops)
-    if (p.op === "add" && last.get(p.stroke.id) !== "delete") picture.push(p.stroke);
-  return picture;
+    if (p.op === "add" && !placed.has(p.stroke.id))
+      placed.set(p.stroke.id, { stroke: p.stroke, group: 1, at: p.localSeq });
+  for (const [id, p] of last) {
+    const stroke = seen.get(id);
+    if (p.op !== "restore" || !stroke || placed.has(id)) continue;
+    placed.set(
+      id,
+      "seq" in stroke
+        ? { stroke, group: 0, at: (stroke as ConfirmedStroke).seq }
+        : { stroke, group: 1, at: p.localSeq },
+    );
+  }
+
+  return [...placed.values()]
+    .filter((e) => last.get(e.stroke.id)?.op !== "delete")
+    .sort((a, b) => a.group - b.group || a.at - b.at)
+    .map((e) => e.stroke);
 }

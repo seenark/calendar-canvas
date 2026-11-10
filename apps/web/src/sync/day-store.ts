@@ -15,8 +15,10 @@ export type DaySnapshot = {
 type DayState = {
   confirmed: ConfirmedStroke[];
   pending: PendingOp[];
-  /** Full data of Strokes the server deleted, kept for the session so a restore can redraw them. */
-  deleted: Map<string, ConfirmedStroke>;
+  /** Every Stroke this Day has held, kept for the session so a restore can redraw one that left the picture by any path. */
+  seen: Map<string, Stroke>;
+  /** Ids and kinds of the composed picture, in order. Revision follows this, not object identity. */
+  key: string[];
   history: UndoHistory;
   snapshot: DaySnapshot;
 };
@@ -39,6 +41,7 @@ export class DayStore {
   /** The Stroke becomes a pending `add` and the newest undo step. */
   commitStroke(stroke: Stroke): void {
     const s = this.state(stroke.day);
+    s.seen.set(stroke.id, stroke);
     this.push(s, { op: "add", stroke });
     s.history.record(stroke.id);
     this.refresh(stroke.day);
@@ -66,12 +69,10 @@ export class DayStore {
     this.refresh(day);
   }
 
-  /** Replaces the Day's confirmed Strokes. Ids that left the list were deleted by the server and move to the cache. */
+  /** Replaces the Day's confirmed Strokes. */
   setConfirmed(day: string, confirmed: ConfirmedStroke[]): void {
     const s = this.state(day);
-    const kept = new Set(confirmed.map((c) => c.id));
-    for (const old of s.confirmed) if (!kept.has(old.id)) s.deleted.set(old.id, old);
-    for (const id of kept) s.deleted.delete(id);
+    for (const c of confirmed) s.seen.set(c.id, c);
     s.confirmed = confirmed;
     this.refresh(day);
   }
@@ -82,7 +83,8 @@ export class DayStore {
       s = {
         confirmed: [],
         pending: [],
-        deleted: new Map(),
+        seen: new Map(),
+        key: [],
         history: new UndoHistory(),
         snapshot: { revision: 0, strokes: [], canUndo: false, canRedo: false },
       };
@@ -97,10 +99,10 @@ export class DayStore {
 
   private refresh(day: string): void {
     const s = this.state(day);
-    const strokes = composeDay(s.confirmed, s.pending, s.deleted);
-    const changed =
-      strokes.length !== s.snapshot.strokes.length ||
-      strokes.some((stroke, i) => stroke !== s.snapshot.strokes[i]);
+    const strokes = composeDay(s.confirmed, s.pending, s.seen);
+    const key = strokes.map((stroke) => `${stroke.id}:${stroke.kind}`);
+    const changed = key.length !== s.key.length || key.some((k, i) => k !== s.key[i]);
+    s.key = key;
     s.snapshot = {
       revision: s.snapshot.revision + (changed ? 1 : 0),
       strokes: changed ? strokes : s.snapshot.strokes,

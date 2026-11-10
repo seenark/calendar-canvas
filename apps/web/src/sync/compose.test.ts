@@ -61,4 +61,25 @@ describe("composeDay", () => {
   it("ignores a restore with no data anywhere", () => {
     expect(ids(composeDay([], [{ op: "restore", id: "ghost", localSeq: 1 }]))).toEqual([]);
   });
+
+  it("ignores a pending add whose id is already confirmed, keeping the seq position", () => {
+    const add: PendingOp = { op: "add", stroke: stroke("a"), localSeq: 1 };
+    const base = [confirmed("a", 1), confirmed("b", 2)];
+    expect(ids(composeDay(base, [add]))).toEqual(["a", "b"]);
+  });
+
+  it("includes a repeated pending add once, at the first add's position", () => {
+    const add = (id: string, localSeq: number): PendingOp => ({
+      op: "add",
+      stroke: stroke(id),
+      localSeq,
+    });
+    expect(ids(composeDay([], [add("p1", 1), add("p2", 2), add("p1", 3)]))).toEqual(["p1", "p2"]);
+  });
+
+  it("restores a Stroke only the cache knows, without a seq, after confirmed Strokes", () => {
+    const cache = new Map([["p", stroke("p")]]);
+    const restore: PendingOp = { op: "restore", id: "p", localSeq: 1 };
+    expect(ids(composeDay([confirmed("a", 1)], [restore], cache))).toEqual(["a", "p"]);
+  });
 });
