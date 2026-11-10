@@ -93,7 +93,6 @@ func TestCacheHeadersPerPath(t *testing.T) {
 	tests := map[string]string{
 		"/sw.js":                  "no-cache",
 		"/manifest.webmanifest":   "no-cache",
-		"/index.html":             "no-cache",
 		"/assets/index-abc123.js": "public, max-age=31536000, immutable",
 		"/api/health":             "no-store",
 		"/favicon.svg":            "",
@@ -101,6 +100,37 @@ func TestCacheHeadersPerPath(t *testing.T) {
 	for target, want := range tests {
 		if got := do(r, http.MethodGet, target, nil).Header().Get("Cache-Control"); got != want {
 			t.Errorf("%s: Cache-Control = %q, want %q", target, got, want)
+		}
+	}
+}
+
+func TestIndexHTMLRedirectsToRoot(t *testing.T) {
+	w := do(newTestRouter(), http.MethodGet, "/index.html", nil)
+	if w.Code != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want 301", w.Code)
+	}
+	if got := w.Header().Get("Location"); got != "./" {
+		t.Errorf("Location = %q, want ./", got)
+	}
+	if got := w.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control = %q, want no-cache", got)
+	}
+}
+
+func TestStaticServingStaysInsideFS(t *testing.T) {
+	r := newTestRouter()
+	tests := []struct{ target, body string }{
+		{"/../sw.js", "sw"},
+		{"/assets/../../sw.js", "sw"},
+		{"/%2e%2e/sw.js", "sw"},
+		{"/assets/../../etc/passwd", "<html>app</html>"},
+		{"/assets/", "<html>app</html>"},
+		{"/assets/..", "<html>app</html>"},
+	}
+	for _, tt := range tests {
+		w := do(r, http.MethodGet, tt.target, nil)
+		if w.Code != http.StatusOK || w.Body.String() != tt.body {
+			t.Errorf("%s: status %d body %q, want 200 %q", tt.target, w.Code, w.Body.String(), tt.body)
 		}
 	}
 }
@@ -115,8 +145,12 @@ func TestBodyLimit(t *testing.T) {
 
 	big := strings.Repeat("a", maxBodyBytes+1)
 
-	if w := do(r, http.MethodPost, "/api/echo", strings.NewReader(big)); w.Code != http.StatusRequestEntityTooLarge {
+	w := do(r, http.MethodPost, "/api/echo", strings.NewReader(big))
+	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Errorf("declared length: status = %d, want 413", w.Code)
+	}
+	if got := w.Header().Get("Cache-Control"); got != "no-store" {
+		t.Errorf("413 Cache-Control = %q, want no-store", got)
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/echo", io.NopCloser(strings.NewReader(big)))

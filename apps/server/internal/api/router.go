@@ -20,7 +20,7 @@ func NewRouter(spa fs.FS) *gin.Engine {
 	r := gin.New()
 	r.RedirectTrailingSlash = false
 	r.RedirectFixedPath = false
-	r.Use(logger(), gin.Recovery(), bodyLimit, noStoreAPI)
+	r.Use(logger(), gin.Recovery(), noStoreAPI, bodyLimit)
 
 	r.GET(healthPath, func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
