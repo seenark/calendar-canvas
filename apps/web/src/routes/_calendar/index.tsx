@@ -1,5 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+
+import { monthOfDay, toDayKey } from "@/lib/date";
 
 export const Route = createFileRoute("/_calendar/")({
-  component: () => null,
+  beforeLoad: () => {
+    throw redirect({
+      to: "/m/$yearMonth",
+      params: { yearMonth: monthOfDay(toDayKey(new Date())) },
+      replace: true,
+    });
+  },
 });
