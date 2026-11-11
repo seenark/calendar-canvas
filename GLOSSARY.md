@@ -9,7 +9,7 @@ A person who has signed in with Google and owns their own calendar, usable only 
 _Avoid_: Account, member
 
 **Approval status**:
-Where a User stands with the Admin: Pending, Approved, or Blocked. Only the Admin changes it, in any direction.
+Where a User stands with the Admin: Pending, Approved, or Blocked. Only the Admin changes it: any User can be approved or blocked, but no User is made Pending again.
 _Avoid_: Access level, user state
 
 **Pending**:
