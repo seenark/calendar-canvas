@@ -18,6 +18,7 @@ var testSPA = fstest.MapFS{
 	"index.html":             {Data: []byte("<html>app</html>")},
 	"sw.js":                  {Data: []byte("sw")},
 	"manifest.webmanifest":   {Data: []byte("{}")},
+	"admin.webmanifest":      {Data: []byte("{}")},
 	"favicon.svg":            {Data: []byte("<svg/>")},
 	"assets/index-abc123.js": {Data: []byte("console.log(1)")},
 }
@@ -97,6 +98,7 @@ func TestCacheHeadersPerPath(t *testing.T) {
 	tests := map[string]string{
 		"/sw.js":                  "no-cache",
 		"/manifest.webmanifest":   "no-cache",
+		"/admin.webmanifest":      "no-cache",
 		"/assets/index-abc123.js": "public, max-age=31536000, immutable",
 		"/api/health":             "no-store",
 		"/favicon.svg":            "",
