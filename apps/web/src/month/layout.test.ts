@@ -1,35 +1,72 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { MAX_MONTH_INDEX, MIN_MONTH_INDEX, monthIndex } from "@/lib/date";
+import { MAX_MONTH_INDEX, MIN_MONTH_INDEX, monthIndex, yearMonthOfIndex } from "@/lib/date";
 
-import { MONTH_RANGE, rectsIntersect, WINDOW_COUNT, windowContains, windowStart } from "./layout";
+import { growAfter, growBefore, rangeAround, rangeContains, rectsIntersect } from "./layout";
 
-describe("windowStart", () => {
-  it("centres the window on the month", () => {
-    const center = monthIndex("2026-11");
-    expect(windowStart(center)).toBe(center - MONTH_RANGE);
+function listed(range: { first: number; last: number }): string[] {
+  return Array.from({ length: range.last - range.first + 1 }, (_, i) =>
+    yearMonthOfIndex(range.first + i),
+  );
+}
+
+describe("rangeAround", () => {
+  it("lists the month and one on each side", () => {
+    expect(listed(rangeAround(monthIndex("2026-11")))).toEqual(["2026-10", "2026-11", "2026-12"]);
   });
 
-  it("keeps the window inside the supported years", () => {
-    expect(windowStart(MIN_MONTH_INDEX)).toBe(MIN_MONTH_INDEX);
-    expect(windowStart(MAX_MONTH_INDEX)).toBe(MAX_MONTH_INDEX - 2 * MONTH_RANGE);
+  it("crosses a year boundary", () => {
+    expect(listed(rangeAround(monthIndex("2027-01")))).toEqual(["2026-12", "2027-01", "2027-02"]);
+  });
+
+  it("stops at the first supported month", () => {
+    expect(listed(rangeAround(MIN_MONTH_INDEX))).toEqual(["1900-01", "1900-02"]);
+  });
+
+  it("stops at the last supported month", () => {
+    expect(listed(rangeAround(MAX_MONTH_INDEX))).toEqual(["2199-11", "2199-12"]);
   });
 });
 
-describe("windowContains", () => {
-  const first = monthIndex("2026-11") - MONTH_RANGE;
-
-  it("lists every month of the window and none beyond it", () => {
-    expect(windowContains(first, first)).toBe(true);
-    expect(windowContains(first, first + WINDOW_COUNT - 1)).toBe(true);
-    expect(windowContains(first, first - 1)).toBe(false);
-    expect(windowContains(first, first + WINDOW_COUNT)).toBe(false);
+describe("growAfter", () => {
+  it("adds exactly the next month", () => {
+    const range = rangeAround(monthIndex("2026-11"));
+    expect(listed(growAfter(range))).toEqual(["2026-10", "2026-11", "2026-12", "2027-01"]);
   });
 
-  it("needs a rebase for a month outside the window and none for one inside", () => {
-    const far = monthIndex("2026-11") + MONTH_RANGE + 1;
-    expect(windowContains(first, far)).toBe(false);
-    expect(windowContains(windowStart(far), far)).toBe(true);
+  it("leaves the range unchanged at the last supported month", () => {
+    const range = rangeAround(MAX_MONTH_INDEX);
+    expect(growAfter(range)).toBe(range);
+  });
+});
+
+describe("growBefore", () => {
+  it("adds exactly the previous month", () => {
+    const range = rangeAround(monthIndex("2026-11"));
+    expect(listed(growBefore(range))).toEqual(["2026-09", "2026-10", "2026-11", "2026-12"]);
+  });
+
+  it("leaves the range unchanged at the first supported month", () => {
+    const range = rangeAround(MIN_MONTH_INDEX);
+    expect(growBefore(range)).toBe(range);
+  });
+});
+
+describe("rangeContains", () => {
+  const range = rangeAround(monthIndex("2026-11"));
+
+  it("is true for both ends", () => {
+    expect(rangeContains(range, monthIndex("2026-10"))).toBe(true);
+    expect(rangeContains(range, monthIndex("2026-12"))).toBe(true);
+  });
+
+  it("is true for a month between the ends", () => {
+    expect(rangeContains(range, monthIndex("2026-11"))).toBe(true);
+  });
+
+  it("is false one month past each end", () => {
+    expect(rangeContains(range, monthIndex("2026-09"))).toBe(false);
+    expect(rangeContains(range, monthIndex("2027-01"))).toBe(false);
   });
 });
 
