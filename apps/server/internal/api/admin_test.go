@@ -57,7 +57,7 @@ func (e *env) signInAdmin() {
 }
 
 func TestAdminLoginCreatesTwelveHourSession(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	before := time.Now()
 	e.signInAdmin()
 
@@ -83,7 +83,7 @@ func TestAdminLoginCreatesTwelveHourSession(t *testing.T) {
 }
 
 func TestAdminLoginRejectsWrongCredentials(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	for name, tc := range map[string][2]string{
 		"wrong password": {adminUsername, "nope"},
 		"wrong username": {"intruder", adminPassword},
@@ -98,13 +98,13 @@ func TestAdminLoginRejectsWrongCredentials(t *testing.T) {
 }
 
 func TestAdminLoginRequiresJSONBody(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	resp := e.api(http.MethodPost, "/api/admin/login", strings.NewReader("{"), map[string]string{"Content-Type": "application/json"})
 	assertEnvelope(t, resp, http.StatusBadRequest, "invalid_request")
 }
 
 func TestAdminLoginIsThrottledPerClientIP(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	for range 5 {
 		assertEnvelope(t, e.adminLogin("203.0.113.7", adminUsername, "nope"), http.StatusUnauthorized, "invalid_credentials")
 	}
@@ -121,7 +121,7 @@ func TestAdminLoginIsThrottledPerClientIP(t *testing.T) {
 }
 
 func TestAdminLoginThrottleFallsBackToRemoteAddress(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	for range 5 {
 		e.adminLogin("", adminUsername, "nope").Body.Close()
 	}
@@ -129,7 +129,7 @@ func TestAdminLoginThrottleFallsBackToRemoteAddress(t *testing.T) {
 }
 
 func TestAdminLoginThrottleSharesOneBucketPerIPv6Prefix(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	for i := range 5 {
 		e.adminLogin(fmt.Sprintf("2001:db8:1:2::%x", i+1), adminUsername, "nope").Body.Close()
 	}
@@ -164,7 +164,7 @@ func TestClientIPNormalizesTheLimiterKey(t *testing.T) {
 }
 
 func TestSuccessfulAdminLoginsCountAgainstTheLimit(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	for range 5 {
 		e.adminLogin("198.51.100.1", adminUsername, adminPassword).Body.Close()
 	}
@@ -176,7 +176,7 @@ func TestAdminLoginIsDisabledWithoutConfiguration(t *testing.T) {
 		"no username": {"ADMIN_USERNAME": ""},
 		"no hash":     {"ADMIN_PASSWORD_HASH": ""},
 	} {
-		e := newEnvWith(t, "you@gmail.com", "", overrides)
+		e := newEnvWith(t, "", overrides)
 		resp := e.adminLogin("", adminUsername, adminPassword)
 		if e.cookie(auth.SessionCookie) != nil {
 			t.Errorf("%s: a session cookie was set", name)
@@ -186,23 +186,26 @@ func TestAdminLoginIsDisabledWithoutConfiguration(t *testing.T) {
 }
 
 func TestAdminEndpointsRequireTheAdminRole(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	list := func() *http.Response { return e.api(http.MethodGet, "/api/admin/users", nil, nil) }
 	del := func() *http.Response { return e.api(http.MethodDelete, "/api/admin/users/x", nil, nil) }
+	patch := func() *http.Response { return e.patchStatus("x", `{"status":"approved"}`) }
 
 	assertEnvelope(t, list(), http.StatusUnauthorized, "unauthorized")
 	assertEnvelope(t, del(), http.StatusUnauthorized, "unauthorized")
+	assertEnvelope(t, patch(), http.StatusUnauthorized, "unauthorized")
 
 	e.signIn("/", nil).Body.Close()
 	assertEnvelope(t, list(), http.StatusForbidden, "forbidden")
 	assertEnvelope(t, del(), http.StatusForbidden, "forbidden")
+	assertEnvelope(t, patch(), http.StatusForbidden, "forbidden")
 	if n := userCount(t, e); n != 1 {
 		t.Errorf("a User session deleted a User: %d left", n)
 	}
 }
 
 func TestAdminSessionGetsForbiddenOnUserCalendarEndpoints(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signInAdmin()
 	assertEnvelope(t, e.api(http.MethodGet, "/api/months/2026-11", nil, nil), http.StatusForbidden, "forbidden")
 	body := []byte(`{"ops":[]}`)
@@ -210,7 +213,7 @@ func TestAdminSessionGetsForbiddenOnUserCalendarEndpoints(t *testing.T) {
 }
 
 func TestAdminSessionCannotReachUserEndpoints(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signInAdmin()
 
 	probe := gin.New()
@@ -235,7 +238,7 @@ func TestAdminSessionCannotReachUserEndpoints(t *testing.T) {
 }
 
 func TestAdminListsUsers(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signIn("/", nil).Body.Close()
 	e.signInAdmin()
 
@@ -250,7 +253,7 @@ func TestAdminListsUsers(t *testing.T) {
 }
 
 func TestAdminStrokeCountIgnoresDeletedStrokes(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	e.seedUser("b@example.com")
 	a.mustSend(addPen("11111111-1111-7111-8111-111111111111", "2026-11-03"), addPen("22222222-2222-7222-8222-222222222222", "2026-11-04"), addPen("33333333-3333-7333-8333-333333333333", "2026-11-05"))
@@ -267,7 +270,7 @@ func TestAdminStrokeCountIgnoresDeletedStrokes(t *testing.T) {
 }
 
 func TestAdminListUsersReturnsAnEmptyArray(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signInAdmin()
 	resp := e.api(http.MethodGet, "/api/admin/users", nil, nil)
 	defer resp.Body.Close()
@@ -278,7 +281,7 @@ func TestAdminListUsersReturnsAnEmptyArray(t *testing.T) {
 }
 
 func TestAdminDeletesUserAndTheirSessions(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	const victimStroke, otherStroke = "11111111-1111-7111-8111-111111111111", "44444444-4444-7444-8444-444444444444"
 	e.seedUser("other@example.com").mustSend(addPen(otherStroke, "2026-11-03"))
 	e.signIn("/", nil).Body.Close()
@@ -289,6 +292,7 @@ func TestAdminDeletesUserAndTheirSessions(t *testing.T) {
 			victim = u
 		}
 	}
+	e.approve(victim.ID)
 	(&account{e: e, cookie: auth.SessionCookie + "=" + e.cookie(auth.SessionCookie).Value}).mustSend(addPen(victimStroke, "2026-11-03"))
 	e.signInAdmin()
 
@@ -317,7 +321,7 @@ func TestAdminDeletesUserAndTheirSessions(t *testing.T) {
 }
 
 func TestAdminSessionIsNeverRenewed(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signInAdmin()
 	hash := e.sessionHash()
 	ctx := context.Background()
@@ -346,28 +350,6 @@ func TestAdminSessionIsNeverRenewed(t *testing.T) {
 	}
 }
 
-func TestUserNoLongerAllowedIsSignedOut(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
-	ctx := context.Background()
-	now := time.Now().UnixMilli()
-	user, err := e.q.UpsertUser(ctx, store.UpsertUserParams{ID: "u1", GoogleSub: "sub-gone", Email: "gone@example.org", CreatedAt: now})
-	if err != nil {
-		t.Fatal(err)
-	}
-	token := make([]byte, 32)
-	hash := sha256.Sum256(token)
-	err = e.q.CreateSession(ctx, store.CreateSessionParams{TokenHash: hash[:], UserID: &user.ID, Role: auth.RoleUser, CreatedAt: now, ExpiresAt: now + 3_600_000})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cookie := auth.SessionCookie + "=" + base64.RawURLEncoding.EncodeToString(token)
-	assertEnvelope(t, e.request(http.MethodGet, e.base+"/api/me", nil, map[string]string{"Cookie": cookie}), http.StatusUnauthorized, "unauthorized")
-	if _, err := e.q.GetSession(ctx, store.GetSessionParams{TokenHash: hash[:]}); !errors.Is(err, sql.ErrNoRows) {
-		t.Errorf("session row survived: %v", err)
-	}
-}
-
 func (e *env) newService(hash string) *auth.Service {
 	e.t.Helper()
 	e.t.Setenv("ADMIN_PASSWORD_HASH", hash)
@@ -383,7 +365,7 @@ func (e *env) newService(hash string) *auth.Service {
 }
 
 func TestRestartWithAdminSignInDisabledEndsAdminSessions(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signInAdmin()
 	hash := e.sessionHash()
 
@@ -394,7 +376,7 @@ func TestRestartWithAdminSignInDisabledEndsAdminSessions(t *testing.T) {
 }
 
 func TestAdminSessionIsSignedOutWhenAdminDisabledAtRequestTime(t *testing.T) {
-	e := newEnvWith(t, "you@gmail.com", "", map[string]string{"ADMIN_USERNAME": "", "ADMIN_PASSWORD_HASH": ""})
+	e := newEnvWith(t, "", map[string]string{"ADMIN_USERNAME": "", "ADMIN_PASSWORD_HASH": ""})
 	ctx := context.Background()
 	token := make([]byte, 32)
 	hash := sha256.Sum256(token)
@@ -411,7 +393,7 @@ func TestAdminSessionIsSignedOutWhenAdminDisabledAtRequestTime(t *testing.T) {
 }
 
 func TestRotatingTheAdminPasswordHashEndsOldAdminSessions(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signInAdmin()
 	hash := e.sessionHash()
 
