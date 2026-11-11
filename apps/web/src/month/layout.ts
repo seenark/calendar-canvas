@@ -2,23 +2,29 @@ import { DAY_ASPECT } from "@/ink/constants";
 import { MAX_MONTH_INDEX, MIN_MONTH_INDEX } from "@/lib/date";
 import { monthGrid } from "@/month/grid";
 
-/** Months listed on each side of the month the view opens on. */
-export const MONTH_RANGE = 600;
+/** The consecutive months the Month view lists, both ends inclusive. */
+export type MonthRange = { first: number; last: number };
 
-/** Months in the list window. */
-export const WINDOW_COUNT = 2 * MONTH_RANGE + 1;
-
-/** Whether the window starting at `first` lists the month at `index`. When it does not, the window is rebased. */
-export function windowContains(first: number, index: number): boolean {
-  return index >= first && index < first + WINDOW_COUNT;
+/** The month at `center` and its neighbours on each side, clamped to the supported years. */
+export function rangeAround(center: number): MonthRange {
+  return {
+    first: Math.max(center - 1, MIN_MONTH_INDEX),
+    last: Math.min(center + 1, MAX_MONTH_INDEX),
+  };
 }
 
-/** First month index of the list window centred on `center`, kept inside the supported years. */
-export function windowStart(center: number): number {
-  return Math.min(
-    Math.max(center - MONTH_RANGE, MIN_MONTH_INDEX),
-    MAX_MONTH_INDEX - 2 * MONTH_RANGE,
-  );
+export function rangeContains(range: MonthRange, index: number): boolean {
+  return index >= range.first && index <= range.last;
+}
+
+/** The range with the month before it added, or the same object at the first supported month. */
+export function growBefore(range: MonthRange): MonthRange {
+  return range.first <= MIN_MONTH_INDEX ? range : { first: range.first - 1, last: range.last };
+}
+
+/** The range with the month after it added, or the same object at the last supported month. */
+export function growAfter(range: MonthRange): MonthRange {
+  return range.last >= MAX_MONTH_INDEX ? range : { first: range.first, last: range.last + 1 };
 }
 
 type Rect = { top: number; bottom: number; left: number; right: number };
