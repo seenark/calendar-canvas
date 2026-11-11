@@ -39,4 +39,5 @@ type User struct {
 	AvatarUrl   *string
 	CreatedAt   int64
 	LastLoginAt *int64
+	Status      string
 }
