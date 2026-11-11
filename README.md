@@ -2,7 +2,7 @@
 
 ปฏิทินเขียนด้วยลายมือสำหรับมือถือ (PWA) แต่ละวันเป็นหน้ากระดาษให้วาดหรือเขียนด้วยนิ้ว ติดตั้งใช้เองได้ด้วย Docker หนึ่งคอนเทนเนอร์ แล้วเปิดสู่อินเทอร์เน็ตผ่าน Cloudflare Tunnel
 
-Calendar Canvas is a mobile-only handwriting calendar. Every day is a page you draw on with a pen or an eraser. It is a React single-page app served by a Go server, with SQLite storage, in one container. Users sign in with Google. An optional Admin account lists and deletes users. The UI is Thai, and years show in Buddhist Era.
+Calendar Canvas is a mobile-only handwriting calendar. Every day is a page you draw on with a pen or an eraser. It is a React single-page app served by a Go server, with SQLite storage, in one container. Users sign in with Google. An Admin account approves and deletes users. The UI is Thai, and years show in Buddhist Era.
 
 ## Contents
 
@@ -33,7 +33,6 @@ DATABASE_PATH=./local.db
 GOOGLE_CLIENT_ID=<your client id>
 GOOGLE_CLIENT_SECRET=<your client secret>
 SESSION_SECRET=<at least 32 random bytes>
-ALLOWED_EMAILS=you@gmail.com
 ```
 
 `DATABASE_PATH` is relative to `apps/server`, where `dev:server` runs. Generate a secret with `openssl rand -base64 48`.
@@ -116,19 +115,8 @@ Compose (or `docker run --env-file`) passes `.env` to the app container. The ser
 | `GOOGLE_CLIENT_ID`     | yes      | From [Google OAuth setup](#google-oauth-setup).                                                                                                    |
 | `GOOGLE_CLIENT_SECRET` | yes      | From the same page.                                                                                                                                |
 | `SESSION_SECRET`       | yes      | At least 32 bytes. Signs the sign-in state cookie. `openssl rand -base64 48` makes one.                                                            |
-| `ALLOWED_EMAILS`       | yes      | Who may sign in. See below.                                                                                                                        |
 | `ADMIN_USERNAME`       | no       | Admin user name.                                                                                                                                   |
 | `ADMIN_PASSWORD_HASH`  | no       | argon2id hash of the Admin password. Admin sign-in is off without it.                                                                              |
-
-### `ALLOWED_EMAILS`
-
-A comma-separated list of Google account emails that may sign in, compared case-insensitively:
-
-```bash
-ALLOWED_EMAILS=you@gmail.com,friend@example.com
-```
-
-Set `ALLOWED_EMAILS=*` to let any Google account with a verified email sign in. The value is required. An empty or missing value stops the server at start-up, so a typo cannot open the instance by accident.
 
 ### Quote the password hash
 
@@ -163,7 +151,7 @@ Do not `source` the unquoted form in a shell; the shell expands its `$` too.
 
 5. Copy the client ID and secret into `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
-The server asks for the `openid`, `email` and `profile` scopes. It rejects accounts whose email Google has not verified, and accounts not covered by `ALLOWED_EMAILS`.
+The server asks for the `openid`, `email` and `profile` scopes. It rejects accounts whose email Google has not verified. Any other Google account can sign in, but must be approved first (see [Admin account](#admin-account)).
 
 You can register several redirect URIs on one client. For example, add both `http://localhost:3001/api/auth/google/callback` for development and your production URI.
 
@@ -193,7 +181,9 @@ Files under `/assets/` have hashed names and are served as immutable, so Cloudfl
 
 ## Admin account
 
-Admin sign-in is optional. It lets you list users and delete them, together with their drawings.
+Any Google account with a verified email can sign in. A first sign-in creates a **Pending** User, who sees a waiting screen instead of the calendar. Only the Admin can approve a Pending User, so set up Admin sign-in before you invite anyone. The Admin page lists Pending Users at the top with อนุมัติ (approve) and ลบ (delete). Approved Users use the calendar, and a waiting User who reopens or refocuses the app moves into the Month view without signing in again. Deleting a User also deletes their drawings, and signing in again makes them Pending.
+
+Users that exist when you upgrade from a version with `ALLOWED_EMAILS` become Approved automatically. A leftover `ALLOWED_EMAILS` value in the environment is ignored.
 
 1. Pick a password and generate its hash. The password is read from stdin, one line:
 
