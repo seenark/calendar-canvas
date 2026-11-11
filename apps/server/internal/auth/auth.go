@@ -55,7 +55,6 @@ const (
 	CodeStateMismatch   = "state_mismatch"
 	CodeAccessDenied    = "access_denied"
 	CodeEmailUnverified = "email_unverified"
-	CodeNotAllowed      = "not_allowed"
 	CodeSignInFailed    = "sign_in_failed"
 )
 
@@ -191,9 +190,6 @@ func (s *Service) FinishLogin(ctx context.Context, r *http.Request) (*http.Cooki
 	if claims.Email == "" || !claims.EmailVerified {
 		return nil, "", &LoginError{CodeEmailUnverified, fmt.Errorf("email %q is not verified", claims.Email)}
 	}
-	if !s.cfg.AllowedEmails.Allows(claims.Email) {
-		return nil, "", &LoginError{CodeNotAllowed, fmt.Errorf("email %q is not in ALLOWED_EMAILS", claims.Email)}
-	}
 
 	id, err := uuid.NewV7()
 	if err != nil {
@@ -259,12 +255,6 @@ func (s *Service) Authenticate(ctx context.Context, r *http.Request) (*Identity,
 		}
 		if err != nil {
 			return nil, nil, err
-		}
-		if sess.Role == RoleUser && !s.cfg.AllowedEmails.Allows(user.Email) {
-			if err := s.q.DeleteSession(ctx, hash); err != nil {
-				return nil, nil, err
-			}
-			return nil, nil, nil
 		}
 		identity.User = &user
 	}

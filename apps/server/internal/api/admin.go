@@ -22,13 +22,23 @@ type adminLoginRequest struct {
 }
 
 type adminUser struct {
-	ID          string  `json:"id"`
-	Email       string  `json:"email"`
-	Name        *string `json:"name"`
-	AvatarURL   *string `json:"avatarUrl"`
-	CreatedAt   int64   `json:"createdAt"`
-	LastLoginAt *int64  `json:"lastLoginAt"`
-	StrokeCount int64   `json:"strokeCount"`
+	ID          string              `json:"id"`
+	Email       string              `json:"email"`
+	Name        *string             `json:"name"`
+	AvatarURL   *string             `json:"avatarUrl"`
+	CreatedAt   int64               `json:"createdAt"`
+	LastLoginAt *int64              `json:"lastLoginAt"`
+	StrokeCount int64               `json:"strokeCount"`
+	Status      auth.ApprovalStatus `json:"status"`
+}
+
+type setUserStatusRequest struct {
+	Status auth.ApprovalStatus `json:"status"`
+}
+
+// adminSettable is the set of Approval statuses the Admin may assign.
+var adminSettable = map[auth.ApprovalStatus]bool{
+	auth.StatusApproved: true,
 }
 
 // clientIP returns the rate-limit key for r. IPv6 addresses collapse to their /64, which one subscriber controls,
@@ -100,9 +110,30 @@ func listUsers(q *store.Queries) gin.HandlerFunc {
 		}
 		out := make([]adminUser, len(users))
 		for i, u := range users {
-			out[i] = adminUser{u.ID, u.Email, u.Name, u.AvatarUrl, u.CreatedAt, u.LastLoginAt, counts[u.ID]}
+			out[i] = adminUser{u.ID, u.Email, u.Name, u.AvatarUrl, u.CreatedAt, u.LastLoginAt, counts[u.ID], auth.ApprovalStatus(u.Status)}
 		}
 		c.JSON(http.StatusOK, out)
+	}
+}
+
+func setUserStatus(q *store.Queries) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body setUserStatusRequest
+		if err := c.ShouldBindJSON(&body); err != nil || !adminSettable[body.Status] {
+			abortError(c, http.StatusBadRequest, "invalid_request", "status must be approved")
+			return
+		}
+		n, err := q.UpdateUserStatus(c.Request.Context(), store.UpdateUserStatusParams{Status: string(body.Status), ID: c.Param("id")})
+		if err != nil {
+			slog.Error("update user status", "error", err)
+			abortError(c, http.StatusInternalServerError, "internal", "internal error")
+			return
+		}
+		if n == 0 {
+			abortError(c, http.StatusNotFound, "not_found", "no such user")
+			return
+		}
+		c.Status(http.StatusNoContent)
 	}
 }
 

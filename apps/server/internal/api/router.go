@@ -39,15 +39,16 @@ func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service, conn *sql.DB) *g
 	api.GET("/me", signedIn, me)
 
 	strokes := newStrokeHandlers(conn)
-	userOnly := requireRole(svc, auth.RoleUser)
-	api.GET("/months/:month", userOnly, strokes.month)
-	api.POST("/strokes/ops", userOnly, strokes.ops)
-	api.POST("/days/:date/prune", userOnly, strokes.prune)
+	calendar := api.Group("", requireRole(svc, auth.RoleUser), requireApproved)
+	calendar.GET("/months/:month", strokes.month)
+	calendar.POST("/strokes/ops", strokes.ops)
+	calendar.POST("/days/:date/prune", strokes.prune)
 
 	q := store.New(conn)
 	api.POST("/admin/login", adminLogin(svc))
 	admin := api.Group("/admin", requireRole(svc, auth.RoleAdmin))
 	admin.GET("/users", listUsers(q))
+	admin.PATCH("/users/:id", setUserStatus(q))
 	admin.DELETE("/users/:id", deleteUser(q))
 
 	r.NoRoute(serveSPA(spa))

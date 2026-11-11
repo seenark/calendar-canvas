@@ -19,7 +19,6 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	SessionSecret      []byte
-	AllowedEmails      Allowlist
 	AdminUsername      string
 	AdminPasswordHash  *passhash.Hash
 }
@@ -27,20 +26,6 @@ type Config struct {
 // AdminEnabled reports whether Admin sign-in is configured.
 func (c Config) AdminEnabled() bool {
 	return c.AdminUsername != "" && c.AdminPasswordHash != nil
-}
-
-// Allowlist is the parsed ALLOWED_EMAILS value.
-type Allowlist struct {
-	all    bool
-	emails map[string]struct{}
-}
-
-func (a Allowlist) Allows(email string) bool {
-	if a.all {
-		return true
-	}
-	_, ok := a.emails[strings.ToLower(strings.TrimSpace(email))]
-	return ok
 }
 
 // SecureCookies reports whether cookies must carry the Secure flag.
@@ -95,12 +80,6 @@ func parse(get func(string) string) (Config, error) {
 		errs = append(errs, fmt.Errorf("SESSION_SECRET must be at least %d bytes", minSessionSecretBytes))
 	}
 
-	allowed, err := parseAllowlist(get("ALLOWED_EMAILS"))
-	if err != nil {
-		errs = append(errs, err)
-	}
-	cfg.AllowedEmails = allowed
-
 	if raw := get("ADMIN_PASSWORD_HASH"); raw != "" {
 		hash, err := passhash.Parse(raw)
 		if err != nil {
@@ -125,22 +104,4 @@ func parseBaseURL(raw string) (string, error) {
 		return "", fmt.Errorf("APP_BASE_URL must be an http(s) origin such as https://cal.example.com, got %q", raw)
 	}
 	return u.Scheme + "://" + strings.ToLower(u.Host), nil
-}
-
-func parseAllowlist(raw string) (Allowlist, error) {
-	a := Allowlist{emails: map[string]struct{}{}}
-	for _, part := range strings.Split(raw, ",") {
-		e := strings.ToLower(strings.TrimSpace(part))
-		switch e {
-		case "":
-		case "*":
-			a.all = true
-		default:
-			a.emails[e] = struct{}{}
-		}
-	}
-	if !a.all && len(a.emails) == 0 {
-		return a, errors.New("ALLOWED_EMAILS is required: list the Google account emails allowed to sign in, or set * to allow any Google account")
-	}
-	return a, nil
 }
