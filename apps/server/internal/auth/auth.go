@@ -56,6 +56,7 @@ const (
 	CodeAccessDenied    = "access_denied"
 	CodeEmailUnverified = "email_unverified"
 	CodeSignInFailed    = "sign_in_failed"
+	CodeBlocked         = "blocked"
 )
 
 const (
@@ -208,6 +209,9 @@ func (s *Service) FinishLogin(ctx context.Context, r *http.Request) (*http.Cooki
 	if err != nil {
 		return nil, "", &LoginError{CodeSignInFailed, fmt.Errorf("upsert user: %w", err)}
 	}
+	if ApprovalStatus(user.Status) == StatusBlocked {
+		return nil, "", &LoginError{CodeBlocked, errors.New("user is blocked")}
+	}
 
 	token := randomBytes(sessionTokenByteSize)
 	err = s.q.CreateSession(ctx, store.CreateSessionParams{
@@ -255,6 +259,12 @@ func (s *Service) Authenticate(ctx context.Context, r *http.Request) (*Identity,
 		}
 		if err != nil {
 			return nil, nil, err
+		}
+		if ApprovalStatus(user.Status) == StatusBlocked {
+			if err := s.q.DeleteSession(ctx, hash); err != nil {
+				return nil, nil, err
+			}
+			return nil, nil, nil
 		}
 		identity.User = &user
 	}
