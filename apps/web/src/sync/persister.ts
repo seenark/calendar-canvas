@@ -13,7 +13,7 @@ import { del, get, set } from "idb-keyval";
 
 export const PERSIST_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 
-const CACHE_KEY = "REACT_QUERY_OFFLINE_CACHE";
+export const CACHE_KEY = "REACT_QUERY_OFFLINE_CACHE";
 const COALESCE_MS = 1000;
 const buster = __APP_VERSION__;
 const dehydrateOptions: DehydrateOptions = {

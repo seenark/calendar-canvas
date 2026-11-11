@@ -1,3 +1,4 @@
+import { QueryClient } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const disk = vi.hoisted(() => new Map<string, unknown>());
@@ -10,11 +11,13 @@ vi.mock("idb-keyval", () => ({
     if (failWrite.on) throw new Error("quota");
     disk.set(key, value);
   },
+  del: async (key: string) => void disk.delete(key),
 }));
 
-import { BUFFER_KEY, persistBuffer, persistNow, restoreBuffer } from "./buffer";
+import { BUFFER_KEY, discardLocalData, persistBuffer, persistNow, restoreBuffer } from "./buffer";
 import { DayStore } from "./day-store";
 import { stroke } from "./fixtures";
+import { CACHE_KEY } from "./persister";
 
 describe("buffer persistence", () => {
   beforeEach(() => {
@@ -60,5 +63,24 @@ describe("buffer persistence", () => {
     after.settle(after.takeUnsent(), [{ id: "a", seq: 1 }], 1);
     await persistNow();
     expect(disk.get(BUFFER_KEY)).toEqual({ ops: [], strokes: [] });
+  });
+
+  it("discardLocalData empties the store, the saved Ops, the saved cache and the cached identity", async () => {
+    const store = new DayStore();
+    persistBuffer(store);
+    store.commitStroke(stroke("a"));
+    await persistNow();
+    disk.set(CACHE_KEY, "{}");
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(["me"], { role: "user" });
+
+    await discardLocalData(queryClient, store);
+
+    expect(disk.has(BUFFER_KEY)).toBe(false);
+    expect(disk.has(CACHE_KEY)).toBe(false);
+    expect(queryClient.getQueryData(["me"])).toBeUndefined();
+    expect(store.pendingCount()).toBe(0);
+    await persistNow();
+    expect(disk.has(BUFFER_KEY)).toBe(false);
   });
 });

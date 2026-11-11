@@ -48,7 +48,7 @@ func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service, conn *sql.DB) *g
 	api.POST("/admin/login", adminLogin(svc))
 	admin := api.Group("/admin", requireRole(svc, auth.RoleAdmin))
 	admin.GET("/users", listUsers(q))
-	admin.PATCH("/users/:id", setUserStatus(q))
+	admin.PATCH("/users/:id", setUserStatus(conn))
 	admin.DELETE("/users/:id", deleteUser(q))
 
 	r.NoRoute(serveSPA(spa))

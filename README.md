@@ -2,7 +2,7 @@
 
 ปฏิทินเขียนด้วยลายมือสำหรับมือถือ (PWA) แต่ละวันเป็นหน้ากระดาษให้วาดหรือเขียนด้วยนิ้ว ติดตั้งใช้เองได้ด้วย Docker หนึ่งคอนเทนเนอร์ แล้วเปิดสู่อินเทอร์เน็ตผ่าน Cloudflare Tunnel
 
-Calendar Canvas is a mobile-only handwriting calendar. Every day is a page you draw on with a pen or an eraser. It is a React single-page app served by a Go server, with SQLite storage, in one container. Users sign in with Google. An Admin account approves and deletes users. The UI is Thai, and years show in Buddhist Era.
+Calendar Canvas is a mobile-only handwriting calendar. Every day is a page you draw on with a pen or an eraser. It is a React single-page app served by a Go server, with SQLite storage, in one container. Users sign in with Google. An Admin account approves, blocks and deletes users. The UI is Thai, and years show in Buddhist Era.
 
 ## Contents
 
@@ -182,7 +182,7 @@ Files under `/assets/` have hashed names and are served as immutable, so Cloudfl
 
 ## Admin account
 
-Any Google account with a verified email can sign in. A first sign-in creates a **Pending** User, who sees a waiting screen instead of the calendar. Only the Admin can approve a Pending User, so set up Admin sign-in before you invite anyone. The Admin page lists Pending Users at the top with อนุมัติ (approve) and ลบ (delete). Approved Users use the calendar, and a waiting User who reopens or refocuses the app moves into the Month view without signing in again. Deleting a User also deletes their drawings, and signing in again makes them Pending.
+Any Google account with a verified email can sign in. A first sign-in creates a **Pending** User, who sees a waiting screen instead of the calendar. Only the Admin can approve a Pending User, so set up Admin sign-in before you invite anyone. The Admin page lists Users in three sections, Pending, Approved and Blocked, with อนุมัติ (approve), ระงับ (block) and ลบ (delete) where they apply. Approved Users use the calendar, and a waiting User who reopens or refocuses the app moves into the Month view without signing in again. Blocking a User ends all their sessions at once and keeps their drawings. A Blocked person who signs in sees that the account is suspended and stays Blocked until the Admin approves them again, and that device discards its unsynced drawing. Deleting a User also deletes their drawings, and signing in again makes them Pending.
 
 Users that exist when you upgrade from a version with `ALLOWED_EMAILS` become Approved automatically. A leftover `ALLOWED_EMAILS` value in the environment is ignored.
 

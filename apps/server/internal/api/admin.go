@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net"
@@ -39,6 +41,7 @@ type setUserStatusRequest struct {
 // adminSettable is the set of Approval statuses the Admin may assign.
 var adminSettable = map[auth.ApprovalStatus]bool{
 	auth.StatusApproved: true,
+	auth.StatusBlocked:  true,
 }
 
 // clientIP returns the rate-limit key for r. IPv6 addresses collapse to their /64, which one subscriber controls,
@@ -116,14 +119,17 @@ func listUsers(q *store.Queries) gin.HandlerFunc {
 	}
 }
 
-func setUserStatus(q *store.Queries) gin.HandlerFunc {
+func setUserStatus(conn *sql.DB) gin.HandlerFunc {
+	q := store.New(conn)
 	return func(c *gin.Context) {
 		var body setUserStatusRequest
 		if err := c.ShouldBindJSON(&body); err != nil || !adminSettable[body.Status] {
-			abortError(c, http.StatusBadRequest, "invalid_request", "status must be approved")
+			abortError(c, http.StatusBadRequest, "invalid_request", "status must be approved or blocked")
 			return
 		}
-		n, err := q.UpdateUserStatus(c.Request.Context(), store.UpdateUserStatusParams{Status: string(body.Status), ID: c.Param("id")})
+		id := c.Param("id")
+		ctx := c.Request.Context()
+		n, err := updateStatus(ctx, conn, q, id, body.Status)
 		if err != nil {
 			slog.Error("update user status", "error", err)
 			abortError(c, http.StatusInternalServerError, "internal", "internal error")
@@ -135,6 +141,26 @@ func setUserStatus(q *store.Queries) gin.HandlerFunc {
 		}
 		c.Status(http.StatusNoContent)
 	}
+}
+
+// updateStatus sets the status and, for Blocked, ends every session of the User in the same transaction.
+func updateStatus(ctx context.Context, conn *sql.DB, q *store.Queries, id string, status auth.ApprovalStatus) (int64, error) {
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	tq := q.WithTx(tx)
+	n, err := tq.UpdateUserStatus(ctx, store.UpdateUserStatusParams{Status: string(status), ID: id})
+	if err != nil || n == 0 {
+		return n, err
+	}
+	if status == auth.StatusBlocked {
+		if err := tq.DeleteUserSessions(ctx, &id); err != nil {
+			return 0, err
+		}
+	}
+	return n, tx.Commit()
 }
 
 func deleteUser(q *store.Queries) gin.HandlerFunc {
