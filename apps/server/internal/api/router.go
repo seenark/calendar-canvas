@@ -94,7 +94,7 @@ func fileCacheControl(name string) string {
 	switch {
 	case strings.HasPrefix(name, "assets/"):
 		return cacheImmutable
-	case name == "sw.js", name == "index.html", name == "manifest.webmanifest":
+	case name == "sw.js", name == "index.html", name == "manifest.webmanifest", name == "admin.webmanifest":
 		return cacheRevalidate
 	}
 	return ""
