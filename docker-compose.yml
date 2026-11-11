@@ -19,15 +19,5 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  cloudflared:
-    image: cloudflare/cloudflared:2026.10.7
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
-    depends_on:
-      app:
-        condition: service_healthy
-    restart: unless-stopped
-
 volumes:
   data:
