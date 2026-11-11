@@ -14,7 +14,6 @@ func env(overrides map[string]string) func(string) string {
 		"GOOGLE_CLIENT_ID":     "id",
 		"GOOGLE_CLIENT_SECRET": "secret",
 		"SESSION_SECRET":       strings.Repeat("s", 32),
-		"ALLOWED_EMAILS":       "you@gmail.com",
 	}
 	for k, v := range overrides {
 		m[k] = v
@@ -32,12 +31,9 @@ func TestParseValid(t *testing.T) {
 	}
 }
 
-func TestParseRejectsEmptyAllowedEmails(t *testing.T) {
-	for _, v := range []string{"", " , ,"} {
-		_, err := parse(env(map[string]string{"ALLOWED_EMAILS": v}))
-		if err == nil || !strings.Contains(err.Error(), "ALLOWED_EMAILS is required") {
-			t.Errorf("ALLOWED_EMAILS=%q: err = %v, want ALLOWED_EMAILS is required", v, err)
-		}
+func TestParseIgnoresLeftoverAllowedEmails(t *testing.T) {
+	if _, err := parse(env(map[string]string{"ALLOWED_EMAILS": "you@gmail.com"})); err != nil {
+		t.Errorf("a leftover ALLOWED_EMAILS stopped parsing: %v", err)
 	}
 }
 
@@ -46,7 +42,7 @@ func TestParseReportsEveryProblem(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error")
 	}
-	for _, name := range []string{"APP_BASE_URL", "DATABASE_PATH", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET", "ALLOWED_EMAILS"} {
+	for _, name := range []string{"APP_BASE_URL", "DATABASE_PATH", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "SESSION_SECRET"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Errorf("error does not mention %s: %v", name, err)
 		}
@@ -71,26 +67,6 @@ func TestSecureCookiesOnlyForHTTPS(t *testing.T) {
 	}
 	if cfg.SecureCookies() {
 		t.Error("http base URL must not set Secure")
-	}
-}
-
-func TestAllowlist(t *testing.T) {
-	cfg, err := parse(env(map[string]string{"ALLOWED_EMAILS": " You@Gmail.com , other@x.org "}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for email, want := range map[string]bool{"you@gmail.com": true, "YOU@GMAIL.COM": true, "other@x.org": true, "evil@x.org": false} {
-		if got := cfg.AllowedEmails.Allows(email); got != want {
-			t.Errorf("Allows(%q) = %v, want %v", email, got, want)
-		}
-	}
-
-	cfg, err = parse(env(map[string]string{"ALLOWED_EMAILS": "*"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.AllowedEmails.Allows("anyone@anywhere.dev") {
-		t.Error("* must allow every account")
 	}
 }
 

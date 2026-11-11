@@ -20,6 +20,7 @@ export const Route = createFileRoute("/_calendar")({
     });
     if (!me) throw redirect({ to: "/login", search: { return: location.href } });
     if (me.role !== "user") throw redirect({ to: "/admin" });
+    if (me.user?.status === "pending") throw redirect({ to: "/waiting" });
   },
   component: CalendarLayout,
 });

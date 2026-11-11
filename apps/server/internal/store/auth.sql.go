@@ -103,7 +103,7 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, google_sub, email, name, avatar_url, created_at, last_login_at FROM users WHERE id = ?
+SELECT id, google_sub, email, name, avatar_url, created_at, last_login_at, status FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
@@ -117,12 +117,13 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.Status,
 	)
 	return i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, google_sub, email, name, avatar_url, created_at, last_login_at FROM users ORDER BY created_at, id
+SELECT id, google_sub, email, name, avatar_url, created_at, last_login_at, status FROM users ORDER BY created_at, id
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
@@ -142,6 +143,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]User, error) {
 			&i.AvatarUrl,
 			&i.CreatedAt,
 			&i.LastLoginAt,
+			&i.Status,
 		); err != nil {
 			return nil, err
 		}
@@ -168,6 +170,23 @@ func (q *Queries) PurgeExpiredSessions(ctx context.Context, expiresAt int64) (in
 	return result.RowsAffected()
 }
 
+const updateUserStatus = `-- name: UpdateUserStatus :execrows
+UPDATE users SET status = ? WHERE id = ?
+`
+
+type UpdateUserStatusParams struct {
+	Status string
+	ID     string
+}
+
+func (q *Queries) UpdateUserStatus(ctx context.Context, arg UpdateUserStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateUserStatus, arg.Status, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const upsertUser = `-- name: UpsertUser :one
 INSERT INTO users (id, google_sub, email, name, avatar_url, created_at, last_login_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -176,7 +195,7 @@ ON CONFLICT (google_sub) DO UPDATE SET
     name          = excluded.name,
     avatar_url    = excluded.avatar_url,
     last_login_at = excluded.last_login_at
-RETURNING id, google_sub, email, name, avatar_url, created_at, last_login_at
+RETURNING id, google_sub, email, name, avatar_url, created_at, last_login_at, status
 `
 
 type UpsertUserParams struct {
@@ -208,6 +227,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, e
 		&i.AvatarUrl,
 		&i.CreatedAt,
 		&i.LastLoginAt,
+		&i.Status,
 	)
 	return i, err
 }

@@ -15,10 +15,11 @@ import (
 const identityKey = "identity"
 
 type meUser struct {
-	ID        string  `json:"id"`
-	Email     string  `json:"email"`
-	Name      *string `json:"name"`
-	AvatarURL *string `json:"avatarUrl"`
+	ID        string              `json:"id"`
+	Email     string              `json:"email"`
+	Name      *string             `json:"name"`
+	AvatarURL *string             `json:"avatarUrl"`
+	Status    auth.ApprovalStatus `json:"status"`
 }
 
 type meResponse struct {
@@ -49,6 +50,15 @@ func requireRole(svc *auth.Service, roles ...string) gin.HandlerFunc {
 		c.Set(identityKey, identity)
 		c.Next()
 	}
+}
+
+// requireApproved runs after requireRole(RoleUser) and keeps Pending Users off the calendar endpoints.
+func requireApproved(c *gin.Context) {
+	if auth.ApprovalStatus(c.MustGet(identityKey).(*auth.Identity).User.Status) != auth.StatusApproved {
+		abortError(c, http.StatusForbidden, "not_approved", "waiting for Admin approval")
+		return
+	}
+	c.Next()
 }
 
 func startLogin(svc *auth.Service) gin.HandlerFunc {
@@ -103,7 +113,7 @@ func me(c *gin.Context) {
 	identity := c.MustGet(identityKey).(*auth.Identity)
 	res := meResponse{Role: identity.Role}
 	if u := identity.User; u != nil {
-		res.User = &meUser{ID: u.ID, Email: u.Email, Name: u.Name, AvatarURL: u.AvatarUrl}
+		res.User = &meUser{ID: u.ID, Email: u.Email, Name: u.Name, AvatarURL: u.AvatarUrl, Status: auth.ApprovalStatus(u.Status)}
 	}
 	c.JSON(http.StatusOK, res)
 }

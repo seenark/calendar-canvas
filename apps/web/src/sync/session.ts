@@ -33,12 +33,8 @@ export async function resumeIfSignedIn(queryClient: QueryClient, store: DayStore
   sendOps(queryClient, store);
 }
 
-/**
- * A full reload after sign-in starts with `needsAuth` cleared, so this covers a page that outlived the sign-in
- * (restored from the back-forward cache, or signed in from another tab). Returns the stop function.
- */
-export function watchSession(queryClient: QueryClient, store: DayStore): () => void {
-  const check = () => void resumeIfSignedIn(queryClient, store);
+/** Calls `check` whenever the app becomes visible, is restored from the back-forward cache, or regains focus. Returns the stop function. */
+export function onAppResumed(check: () => void): () => void {
   const onVisibility = () => {
     if (document.visibilityState === "visible") check();
   };
@@ -50,4 +46,12 @@ export function watchSession(queryClient: QueryClient, store: DayStore): () => v
     window.removeEventListener("pageshow", check);
     window.removeEventListener("focus", check);
   };
+}
+
+/**
+ * A full reload after sign-in starts with `needsAuth` cleared, so this covers a page that outlived the sign-in
+ * (restored from the back-forward cache, or signed in from another tab). Returns the stop function.
+ */
+export function watchSession(queryClient: QueryClient, store: DayStore): () => void {
+  return onAppResumed(() => void resumeIfSignedIn(queryClient, store));
 }

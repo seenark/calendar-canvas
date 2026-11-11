@@ -37,13 +37,13 @@ type env struct {
 
 // newEnv serves the router on a real listener so the cookie jar and redirects behave like a browser.
 // A non-empty baseURL skips the listener and is only usable through handler.
-func newEnv(t *testing.T, allowed, baseURL string) *env {
+func newEnv(t *testing.T, baseURL string) *env {
 	t.Helper()
-	return newEnvWith(t, allowed, baseURL, nil)
+	return newEnvWith(t, baseURL, nil)
 }
 
 // newEnvWith overrides environment variables after the defaults, which configure the Admin.
-func newEnvWith(t *testing.T, allowed, baseURL string, overrides map[string]string) *env {
+func newEnvWith(t *testing.T, baseURL string, overrides map[string]string) *env {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -59,7 +59,6 @@ func newEnvWith(t *testing.T, allowed, baseURL string, overrides map[string]stri
 		"GOOGLE_CLIENT_ID":     testClientID,
 		"GOOGLE_CLIENT_SECRET": testClientSecret,
 		"SESSION_SECRET":       strings.Repeat("k", 32),
-		"ALLOWED_EMAILS":       allowed,
 		"ADMIN_USERNAME":       adminUsername,
 		"ADMIN_PASSWORD_HASH":  testAdminHash(),
 	} {
@@ -187,6 +186,14 @@ func (e *env) sessionHash() []byte {
 	return h[:]
 }
 
+func (e *env) approve(userID string) {
+	e.t.Helper()
+	n, err := e.q.UpdateUserStatus(context.Background(), store.UpdateUserStatusParams{Status: string(auth.StatusApproved), ID: userID})
+	if err != nil || n != 1 {
+		e.t.Fatalf("approve %s: %d rows, %v", userID, n, err)
+	}
+}
+
 func (e *env) signedIn() bool {
 	e.t.Helper()
 	resp := e.api(http.MethodGet, "/api/me", nil, nil)
@@ -224,7 +231,7 @@ func assertEnvelope(t *testing.T, resp *http.Response, status int, code string) 
 }
 
 func TestSignInReturnsToOriginalPage(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 
 	resp := e.signIn("/m/2026-11", nil)
 	resp.Body.Close()
@@ -265,7 +272,7 @@ func TestSignInReturnsToOriginalPage(t *testing.T) {
 }
 
 func TestSignInTwiceUpdatesTheSameUser(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signIn("/", nil).Body.Close()
 	first := decode[meResponse](t, e.api(http.MethodGet, "/api/me", nil, nil))
 
@@ -280,22 +287,20 @@ func TestSignInTwiceUpdatesTheSameUser(t *testing.T) {
 
 func TestSignInRejections(t *testing.T) {
 	tests := []struct {
-		name    string
-		allowed string
-		user    *profile
-		nonce   string
-		mutate  func(*url.URL)
-		code    string
+		name   string
+		user   *profile
+		nonce  string
+		mutate func(*url.URL)
+		code   string
 	}{
-		{name: "state mismatch", allowed: "you@gmail.com", code: "state_mismatch", mutate: func(u *url.URL) {
+		{name: "state mismatch", code: "state_mismatch", mutate: func(u *url.URL) {
 			q := u.Query()
 			q.Set("state", "forged")
 			u.RawQuery = q.Encode()
 		}},
-		{name: "ID token nonce mismatch", allowed: "you@gmail.com", nonce: "forged", code: "sign_in_failed"},
-		{name: "unverified email", allowed: "you@gmail.com", user: &profile{Sub: "s", Email: "you@gmail.com", Verified: false}, code: "email_unverified"},
-		{name: "email outside the allowlist", allowed: "someone@else.org", code: "not_allowed"},
-		{name: "Google reports an error", allowed: "you@gmail.com", code: "access_denied", mutate: func(u *url.URL) {
+		{name: "ID token nonce mismatch", nonce: "forged", code: "sign_in_failed"},
+		{name: "unverified email", user: &profile{Sub: "s", Email: "you@gmail.com", Verified: false}, code: "email_unverified"},
+		{name: "Google reports an error", code: "access_denied", mutate: func(u *url.URL) {
 			q := u.Query()
 			q.Set("error", "access_denied")
 			u.RawQuery = q.Encode()
@@ -303,7 +308,7 @@ func TestSignInRejections(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := newEnv(t, tt.allowed, "")
+			e := newEnv(t, "")
 			if tt.user != nil {
 				e.issuer.setUser(*tt.user)
 			}
@@ -318,7 +323,7 @@ func TestSignInRejections(t *testing.T) {
 }
 
 func TestSignInWithoutStateCookieIsRejected(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	resp := e.request(http.MethodGet, e.base+"/api/auth/google/callback?code=x&state=y", nil, nil)
 	resp.Body.Close()
 	if loc := resp.Header.Get("Location"); loc != "/login?error=state_mismatch" {
@@ -326,25 +331,8 @@ func TestSignInWithoutStateCookieIsRejected(t *testing.T) {
 	}
 }
 
-func TestWildcardAllowsEveryGoogleAccount(t *testing.T) {
-	e := newEnv(t, "*", "")
-	e.issuer.setUser(profile{Sub: "stranger", Email: "Anyone@Example.org", Verified: true})
-	e.signIn("/", nil).Body.Close()
-	if !e.signedIn() {
-		t.Error("* must allow any verified account")
-	}
-}
-
-func TestAllowlistIsCaseInsensitive(t *testing.T) {
-	e := newEnv(t, " You@Gmail.COM ", "")
-	e.signIn("/", nil).Body.Close()
-	if !e.signedIn() {
-		t.Error("allowlist match must ignore case and whitespace")
-	}
-}
-
 func TestStartRejectsNonRelativeReturn(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	for _, ret := range []string{"https://evil.example", "//evil.example", "/\\evil.example", "evil", "javascript:alert(1)", "/ok\r\nSet-Cookie: x=y"} {
 		resp := e.api(http.MethodGet, "/api/auth/google/start?return="+url.QueryEscape(ret), nil, nil)
 		if resp.Header.Get("Set-Cookie") != "" || resp.Header.Get("Location") != "" {
@@ -355,7 +343,7 @@ func TestStartRejectsNonRelativeReturn(t *testing.T) {
 }
 
 func TestSessionRenewal(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signIn("/", nil).Body.Close()
 	hash := e.sessionHash()
 	ctx := context.Background()
@@ -388,7 +376,7 @@ func TestSessionRenewal(t *testing.T) {
 }
 
 func TestExpiredSessionIsRejected(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signIn("/", nil).Body.Close()
 	err := e.q.ExtendSession(context.Background(), store.ExtendSessionParams{TokenHash: e.sessionHash(), ExpiresAt: time.Now().Add(-time.Minute).UnixMilli()})
 	if err != nil {
@@ -398,12 +386,12 @@ func TestExpiredSessionIsRejected(t *testing.T) {
 }
 
 func TestMeRequiresSession(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	assertEnvelope(t, e.api(http.MethodGet, "/api/me", nil, nil), http.StatusUnauthorized, "unauthorized")
 }
 
 func TestLogout(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signIn("/", nil).Body.Close()
 	old := e.cookie(auth.SessionCookie).Value
 	hash := e.sessionHash()
@@ -428,12 +416,12 @@ func TestLogout(t *testing.T) {
 }
 
 func TestLogoutRequiresSession(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	assertEnvelope(t, e.api(http.MethodPost, "/api/auth/logout", nil, nil), http.StatusUnauthorized, "unauthorized")
 }
 
 func TestCSRF(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "")
+	e := newEnv(t, "")
 	e.signIn("/", nil).Body.Close()
 
 	t.Run("wrong Origin", func(t *testing.T) {
@@ -465,7 +453,7 @@ func TestCSRF(t *testing.T) {
 }
 
 func TestCookiesAreSecureOnHTTPSBase(t *testing.T) {
-	e := newEnv(t, "you@gmail.com", "https://cal.example.com")
+	e := newEnv(t, "https://cal.example.com")
 	w := httptest.NewRecorder()
 	e.handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/auth/google/start?return=%2F", nil))
 	cookies := w.Result().Cookies()

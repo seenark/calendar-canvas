@@ -33,6 +33,7 @@ func (e *env) seedUser(email string) *account {
 	if _, err := e.q.UpsertUser(ctx, store.UpsertUserParams{ID: id, GoogleSub: "sub-" + email, Email: email, CreatedAt: now}); err != nil {
 		e.t.Fatal(err)
 	}
+	e.approve(id)
 	token := make([]byte, 32)
 	if _, err := rand.Read(token); err != nil {
 		e.t.Fatal(err)
@@ -132,7 +133,7 @@ func restore(id string) Op     { return Op{Op: OpRestore, ID: id} }
 func addPen(id, day string) Op { return add(penStroke(id, day)) }
 
 func TestResendingABatchCreatesNoDuplicates(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	s1, s2 := newID(), newID()
 	batch := []Op{addPen(s1, "2026-03-14"), addPen(s2, "2026-03-14")}
@@ -155,7 +156,7 @@ func TestResendingABatchCreatesNoDuplicates(t *testing.T) {
 }
 
 func TestAddThenDeleteThenResentAddStaysDeleted(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	id := newID()
 
@@ -172,7 +173,7 @@ func TestAddThenDeleteThenResentAddStaysDeleted(t *testing.T) {
 }
 
 func TestDeleteAndRestoreToggleTheTombstone(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	id := newID()
 	seq := a.mustSend(addPen(id, "2026-03-14"))[0].Seq
@@ -189,7 +190,7 @@ func TestDeleteAndRestoreToggleTheTombstone(t *testing.T) {
 }
 
 func TestMissingIdsAreReportedNotRejected(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	gone1, gone2, kept := newID(), newID(), newID()
 
@@ -208,7 +209,7 @@ func TestMissingIdsAreReportedNotRejected(t *testing.T) {
 }
 
 func TestCrossUserIdRejectsTheWholeBatch(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a, b := e.seedUser("a@example.com"), e.seedUser("b@example.com")
 	owned := newID()
 	a.mustSend(addPen(owned, "2026-03-14"))
@@ -235,7 +236,7 @@ func TestCrossUserIdRejectsTheWholeBatch(t *testing.T) {
 }
 
 func TestUsersOnlySeeTheirOwnStrokes(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a, b := e.seedUser("a@example.com"), e.seedUser("b@example.com")
 	a.mustSend(addPen(newID(), "2026-03-14"))
 	if got := b.month("2026-03"); len(got) != 0 {
@@ -244,7 +245,7 @@ func TestUsersOnlySeeTheirOwnStrokes(t *testing.T) {
 }
 
 func TestMonthReturnsStrokesInSeqOrderWithoutTombstones(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	late, early, dead, eraser, otherMonth, nextMonth := newID(), newID(), newID(), newID(), newID(), newID()
 	eraserStroke := penStroke(eraser, "2026-03-01")
@@ -280,7 +281,7 @@ func TestMonthReturnsStrokesInSeqOrderWithoutTombstones(t *testing.T) {
 }
 
 func TestMonthRequiresAUserAndAValidMonth(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 
 	assertEnvelope(t, e.api(http.MethodGet, "/api/months/2026-03", nil, nil), http.StatusUnauthorized, "unauthorized")
@@ -292,7 +293,7 @@ func TestMonthRequiresAUserAndAValidMonth(t *testing.T) {
 }
 
 func TestLimitsAreEnforcedWithTheErrorEnvelope(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	day := "2026-03-14"
 

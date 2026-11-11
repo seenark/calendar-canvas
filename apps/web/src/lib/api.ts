@@ -37,7 +37,13 @@ export const signInUrl = (returnPath: string): string =>
   "/api/auth/google/start?return=" + encodeURIComponent(returnPath);
 
 export interface Me {
-  user: { id: string; email: string; name: string | null; avatarUrl: string | null } | null;
+  user: {
+    id: string;
+    email: string;
+    name: string | null;
+    avatarUrl: string | null;
+    status: "pending" | "approved";
+  } | null;
   role: "user" | "admin";
 }
 
@@ -51,6 +57,11 @@ export const meQuery = queryOptions({
   retry: false,
   networkMode: "always",
 });
+
+export async function signOut(queryClient: QueryClient): Promise<void> {
+  await api("/api/auth/logout", { method: "POST" });
+  queryClient.removeQueries({ queryKey: meQuery.queryKey });
+}
 
 /**
  * The signed-in identity, or null when the server says there is no session. Any other failure (offline, 5xx)
@@ -91,6 +102,7 @@ export interface AdminUser {
   createdAt: number;
   lastLoginAt: number | null;
   strokeCount: number;
+  status: "pending" | "approved" | "blocked";
 }
 
 export const adminUsersQuery = queryOptions({

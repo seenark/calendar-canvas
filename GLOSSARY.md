@@ -5,11 +5,27 @@ A mobile-only handwriting calendar: each user browses months and draws freehand 
 ## Calendar
 
 **User**:
-A person signed in with Google who owns their own calendar.
+A person who has signed in with Google and owns their own calendar, usable only while Approved.
 _Avoid_: Account, member
 
+**Approval status**:
+Where a User stands with the Admin: Pending, Approved, or Blocked. Only the Admin changes it: any User can be approved or blocked, but no User is made Pending again.
+_Avoid_: Access level, user state
+
+**Pending**:
+A User who has signed in but whom the Admin has not yet approved or blocked; a Pending User cannot draw.
+_Avoid_: Waitlisted, unverified, applicant
+
+**Approved**:
+A User the Admin has allowed to use their calendar.
+_Avoid_: Active, verified, allowed
+
+**Blocked**:
+A User the Admin has rejected or suspended; signing in again does not make them Pending, and their Strokes stay stored. Deleting a User is different: it removes the User and their Strokes, and signing in again makes them Pending.
+_Avoid_: Banned, rejected, disabled
+
 **Admin**:
-The single operator who signs in with a username and password to manage Users; an Admin is not a User and has no calendar.
+The single operator who signs in with a username and password to approve, block, and delete Users; an Admin is not a User and has no calendar.
 _Avoid_: Superuser, admin user
 
 **Day**:

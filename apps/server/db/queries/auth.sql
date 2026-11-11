@@ -35,3 +35,6 @@ SELECT * FROM users ORDER BY created_at, id;
 
 -- name: DeleteUser :execrows
 DELETE FROM users WHERE id = ?;
+
+-- name: UpdateUserStatus :execrows
+UPDATE users SET status = ? WHERE id = ?;

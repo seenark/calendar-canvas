@@ -29,7 +29,7 @@ func (a *account) mustPrune(day string, deleteIDs ...string) int64 {
 }
 
 func TestPruneSoftDeletesOnlyTheUsersOwnIdsInThatDay(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a, b := e.seedUser("a@example.com"), e.seedUser("b@example.com")
 	day, otherDay := "2026-03-14", "2026-03-15"
 	pruned, kept, otherDayID, foreign := newID(), newID(), newID(), newID()
@@ -52,7 +52,7 @@ func TestPruneSoftDeletesOnlyTheUsersOwnIdsInThatDay(t *testing.T) {
 }
 
 func TestReplayedAddAfterPruneStaysDeleted(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	id := newID()
 	seq := a.mustSend(addPen(id, "2026-03-14"))[0].Seq
@@ -69,7 +69,7 @@ func TestReplayedAddAfterPruneStaysDeleted(t *testing.T) {
 }
 
 func TestReplayedAddBeforeThePurgeAgeStaysDeleted(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	id := newID()
 	a.mustSend(addPen(id, "2026-03-14"))
@@ -88,7 +88,7 @@ func TestReplayedAddBeforeThePurgeAgeStaysDeleted(t *testing.T) {
 }
 
 func TestPruneEnforcesTheIdCapAndValidatesTheRequest(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	a := e.seedUser("a@example.com")
 	day := "2026-03-14"
 
@@ -130,7 +130,7 @@ func TestPruneEnforcesTheIdCapAndValidatesTheRequest(t *testing.T) {
 }
 
 func TestPruneRequiresAUser(t *testing.T) {
-	e := newEnv(t, "*", "")
+	e := newEnv(t, "")
 	resp := e.api(http.MethodPost, "/api/days/2026-03-14/prune", nil, map[string]string{"Content-Type": "application/json"})
 	assertEnvelope(t, resp, http.StatusUnauthorized, "unauthorized")
 }
