@@ -13,6 +13,7 @@ Calendar Canvas is a mobile-only handwriting calendar. Every day is a page you d
 - [Cloudflare Tunnel](#cloudflare-tunnel)
 - [Cloudflare cache rules](#cloudflare-cache-rules)
 - [Admin account](#admin-account)
+- [Install the Admin app on iPhone](#install-the-admin-app-on-iphone)
 - [Data and backup](#data-and-backup)
 - [Releases](#releases)
 - [Known open items](#known-open-items)
@@ -165,14 +166,14 @@ Run `cloudflared` on the host, not in a container. It connects out to Cloudflare
 
 ## Cloudflare cache rules
 
-The server marks `sw.js`, `index.html` and `manifest.webmanifest` as `Cache-Control: no-cache`, and serves `index.html` for every app route. If Cloudflare caches them, users stay on an old version after a redeploy. Bypass the cache for them.
+The server marks `sw.js`, `index.html`, `manifest.webmanifest` and `admin.webmanifest` as `Cache-Control: no-cache`, and serves `index.html` for every app route. If Cloudflare caches them, users stay on an old version after a redeploy. Bypass the cache for them.
 
 In the Cloudflare dashboard, open your domain, then Caching, then Cache Rules. Create a rule:
 
 - When the expression is:
 
   ```
-  (http.request.uri.path in {"/" "/index.html" "/sw.js" "/manifest.webmanifest"})
+  (http.request.uri.path in {"/" "/index.html" "/sw.js" "/manifest.webmanifest" "/admin.webmanifest"})
   ```
 
 - Then: Cache eligibility, Bypass cache.
@@ -209,6 +210,14 @@ Users that exist when you upgrade from a version with `ALLOWED_EMAILS` become Ap
 3. Restart the app (`docker compose up -d app`, or re-create the `docker run` container), then open `https://<your host>/admin/login`.
 
 Admin sign-in attempts are rate-limited per client IP.
+
+## Install the Admin app on iPhone
+
+The Admin area installs as its own home-screen app named "Cal Admin", with a black icon that is easy to tell apart from the calendar app.
+
+1. In Safari, open `https://<your host>/admin/login`. Do this in Safari, not inside the calendar app, because a home-screen app has no address bar.
+2. Tap Share, then Add to Home Screen. The name is filled in as "Cal Admin".
+3. Open Cal Admin from the home screen. It opens at `/admin`, or at the Admin sign-in when your 12-hour Admin session has expired, and it stays inside `/admin`.
 
 ## Data and backup
 
