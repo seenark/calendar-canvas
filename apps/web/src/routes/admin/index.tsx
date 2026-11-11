@@ -18,7 +18,7 @@ const formatTime = (ms: number | null) =>
     ? "-"
     : new Date(ms).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
 
-type UserAction = "approve" | "remove";
+type UserAction = "approve" | "block" | "remove";
 
 /** Admin page sections in display order, one per Approval status. */
 const SECTIONS: {
@@ -26,8 +26,13 @@ const SECTIONS: {
   title: (count: number) => string;
   actions: UserAction[];
 }[] = [
-  { status: "pending", title: (count) => `รออนุมัติ (${count})`, actions: ["approve", "remove"] },
-  { status: "approved", title: () => "ใช้งานอยู่", actions: ["remove"] },
+  {
+    status: "pending",
+    title: (count) => `รออนุมัติ (${count})`,
+    actions: ["approve", "block", "remove"],
+  },
+  { status: "approved", title: () => "ใช้งานอยู่", actions: ["block", "remove"] },
+  { status: "blocked", title: () => "ถูกระงับ", actions: ["approve", "remove"] },
 ];
 
 interface ActionButton {
@@ -47,14 +52,11 @@ function AdminPage() {
     onError: () => toast.error("ลบผู้ใช้ไม่สำเร็จ"),
   });
 
-  const approve = useMutation({
-    mutationFn: (user: AdminUser) =>
-      api(`/api/admin/users/${user.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ status: "approved" }),
-      }),
+  const setStatus = useMutation({
+    mutationFn: ({ user, status }: { user: AdminUser; status: "approved" | "blocked" }) =>
+      api(`/api/admin/users/${user.id}`, { method: "PATCH", body: JSON.stringify({ status }) }),
     onSuccess: () => queryClient.invalidateQueries(adminUsersQuery),
-    onError: () => toast.error("อนุมัติผู้ใช้ไม่สำเร็จ"),
+    onError: () => toast.error("เปลี่ยนสถานะผู้ใช้ไม่สำเร็จ"),
   });
 
   const confirmRemove = (user: AdminUser) => {
@@ -63,10 +65,19 @@ function AdminPage() {
   };
 
   const actions: Record<UserAction, ActionButton> = {
-    approve: { label: "อนุมัติ", variant: "default", run: (user) => approve.mutate(user) },
+    approve: {
+      label: "อนุมัติ",
+      variant: "default",
+      run: (user) => setStatus.mutate({ user, status: "approved" }),
+    },
+    block: {
+      label: "ระงับ",
+      variant: "destructive",
+      run: (user) => setStatus.mutate({ user, status: "blocked" }),
+    },
     remove: { label: "ลบ", variant: "destructive", run: confirmRemove },
   };
-  const busy = approve.isPending || remove.isPending;
+  const busy = setStatus.isPending || remove.isPending;
 
   const leave = async () => {
     await signOut(queryClient);
