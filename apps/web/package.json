@@ -11,7 +11,8 @@
     "test": "vp test",
     "test:browser": "vp test run --config vitest.browser.config.ts",
     "check-types": "vp build && tsc --noEmit",
-    "generate-pwa-assets": "pwa-assets-generator"
+    "generate-pwa-assets": "pwa-assets-generator",
+    "generate-pwa-assets:admin": "pwa-assets-generator --config pwa-assets.admin.config.ts"
   },
   "dependencies": {
     "@calendar-canvas/ui": "workspace:*",
