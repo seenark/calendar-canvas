@@ -56,8 +56,7 @@ function WaitingPage() {
         <section className="paper-torn bg-paper text-paper-foreground flex flex-col items-center gap-5 px-6 py-10 text-center">
           <h1 className="text-2xl font-bold">รอผู้ดูแลอนุมัติ</h1>
           <p className="text-sm">
-            คุณเข้าสู่ระบบแล้ว แต่บัญชีนี้ยังรอการอนุมัติจากผู้ดูแลระบบ
-            เมื่ออนุมัติแล้วคุณจะเข้าใช้ปฏิทินได้ทันที
+            คุณเข้าสู่ระบบแล้ว แต่บัญชีนี้ยังรอการอนุมัติจากผู้ดูแลระบบ เมื่ออนุมัติแล้วคุณจะเข้าใช้ปฏิทินได้ทันที
           </p>
           <Button variant="outline" onClick={leave}>
             ออกจากระบบ
