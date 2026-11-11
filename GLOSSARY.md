@@ -16,6 +16,10 @@ _Avoid_: Superuser, admin user
 One calendar date (`YYYY-MM-DD`) in one User's calendar, chosen by the cell the User opened, not by when drawing happened.
 _Avoid_: Date page, entry
 
+**Month view**:
+The User's home screen: a vertical list of consecutive months, each showing its Day cells.
+_Avoid_: Calendar view, month list, month page
+
 **Day cell**:
 The small representation of a Day inside the month view.
 _Avoid_: Tile, square
