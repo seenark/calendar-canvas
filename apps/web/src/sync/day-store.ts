@@ -113,6 +113,13 @@ export class DayStore {
     this.refresh(day);
   }
 
+  /** Drops every Pending op, in flight or not. Their Strokes leave the picture. */
+  discardPending(): void {
+    this.inflight.clear();
+    for (const s of this.days.values()) s.pending = [];
+    for (const day of this.days.keys()) this.refresh(day);
+  }
+
   /** Pending ops not yet in flight, oldest first. They count as in flight until `settle` or `release`. */
   takeUnsent(): SentOp[] {
     const out = this.pendingOps().filter((op) => !this.inflight.has(op.localSeq));

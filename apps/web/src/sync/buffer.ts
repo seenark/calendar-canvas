@@ -1,6 +1,8 @@
-import { get, set } from "idb-keyval";
+import type { QueryClient } from "@tanstack/react-query";
+import { del, get, set } from "idb-keyval";
 
 import type { DayStore, PendingSnapshot } from "./day-store";
+import { CACHE_KEY } from "./persister";
 
 export const BUFFER_KEY = "pendingOps";
 
@@ -22,6 +24,17 @@ let writeNow = () => Promise.resolve();
 
 /** Resolves once every change made so far is in IndexedDB. Rejects when that write fails. */
 export const persistNow = (): Promise<void> => writeNow();
+
+/**
+ * Throws away this device's unsynced work: the Pending ops (in memory, so the writer cannot save them back, and
+ * in IndexedDB), the saved query cache, and every cached query and mutation. Used when the server says the User is Blocked.
+ */
+export async function discardLocalData(queryClient: QueryClient, store: DayStore): Promise<void> {
+  store.discardPending();
+  queryClient.clear();
+  await writeNow().catch(() => {});
+  await Promise.all([del(BUFFER_KEY), del(CACHE_KEY)]);
+}
 
 /**
  * Keeps settled Ops in the saved record until the returned function runs. A settled Op leaves the buffer only

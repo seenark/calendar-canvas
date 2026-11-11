@@ -1,6 +1,8 @@
 import { Button } from "@calendar-canvas/ui/components/button";
 import { createFileRoute } from "@tanstack/react-router";
 
+import { discardLocalData } from "@/sync/buffer";
+import { dayStore } from "@/sync/day-store";
 import { persistThenSignIn } from "@/sync/session";
 
 interface LoginSearch {
@@ -12,6 +14,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   state_mismatch: "การเข้าสู่ระบบหมดอายุหรือไม่ถูกต้อง ลองใหม่อีกครั้ง",
   access_denied: "คุณยกเลิกการเข้าสู่ระบบด้วย Google",
   email_unverified: "อีเมล Google นี้ยังไม่ได้รับการยืนยัน",
+  blocked: "บัญชีนี้ถูกระงับ โปรดติดต่อผู้ดูแล",
   offline: "ออฟไลน์ เชื่อมต่ออินเทอร์เน็ตเพื่อเข้าสู่ระบบ",
   sign_in_failed: "เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง",
 };
@@ -21,6 +24,9 @@ export const Route = createFileRoute("/login")({
     return: typeof search.return === "string" ? search.return : undefined,
     error: typeof search.error === "string" ? search.error : undefined,
   }),
+  beforeLoad: async ({ context, search }) => {
+    if (search.error === "blocked") await discardLocalData(context.queryClient, dayStore);
+  },
   component: LoginPage,
 });
 
