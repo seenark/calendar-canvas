@@ -3,7 +3,14 @@ import { useRouter } from "@tanstack/react-router";
 import { getDefaultStore } from "jotai/vanilla";
 import { ArrowLeft } from "lucide-react";
 import { motion, useIsPresent, useReducedMotion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type PointerEvent,
+} from "react";
 
 import { DrawingEngine } from "@/drawing/engine";
 import { SaveStatus } from "@/drawing/save-status";
@@ -20,6 +27,9 @@ import { CellThumbnailCopy, Thumbnail } from "@/thumbnails/thumbnail";
 /** Longest the engine waits for the expand animation before it mounts anyway. */
 const EXPAND_TIMEOUT_MS = 1000;
 
+/** Leftward travel that turns a press on the blank space around the Paper into going back. */
+const SWIPE_BACK_PX = 60;
+
 const FADE = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
 
 /**
@@ -34,6 +44,9 @@ export function DrawingPage({ date }: { date: string }) {
   const isPresent = useIsPresent();
   const paperRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const paperSlotRef = useRef<HTMLDivElement>(null);
+  const pointersDown = useRef(new Set<number>());
+  const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
   const [paperWidth, setPaperWidth] = useState(0);
   usePruning(date, surfaceRef);
   const [shared] = useState(() => !reducedMotion && isDayCellOnScreen(date));
@@ -99,8 +112,38 @@ export function DrawingPage({ date }: { date: string }) {
       });
   };
 
+  /** A swipe starts only from the sole pointer down, pressed on the blank space around the Paper. */
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    pointersDown.current.add(e.pointerId);
+    swipe.current =
+      pointersDown.current.size === 1 && e.target === paperSlotRef.current
+        ? { id: e.pointerId, x: e.clientX, y: e.clientY }
+        : null;
+  };
+
+  const onPointerEnd = (e: PointerEvent<HTMLDivElement>) => {
+    pointersDown.current.delete(e.pointerId);
+    const start = swipe.current;
+    if (start?.id !== e.pointerId) return;
+    swipe.current = null;
+    const left = start.x - e.clientX;
+    // a page already leaving must not go back a second time
+    if (
+      e.type === "pointerup" &&
+      isPresent &&
+      left >= SWIPE_BACK_PX &&
+      left > Math.abs(e.clientY - start.y)
+    )
+      goBack();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 mx-auto flex max-w-[430px] flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+    <div
+      className="fixed inset-0 z-50 mx-auto flex max-w-[430px] flex-col pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerEnd}
+      onPointerCancel={onPointerEnd}
+    >
       <motion.div className="bg-background absolute inset-0 -z-10" {...FADE} />
       <motion.header className="flex h-12 shrink-0 items-center gap-2 px-2" {...FADE}>
         <Button
@@ -110,12 +153,15 @@ export function DrawingPage({ date }: { date: string }) {
           aria-label="กลับ"
           onClick={goBack}
         >
-          <ArrowLeft />
+          <ArrowLeft className="size-5" />
         </Button>
         <h1 className="text-sm font-bold">{formatThaiDate(parseDay(date)!)}</h1>
         <SaveStatus />
       </motion.header>
-      <div className="grid min-h-0 flex-1 place-items-center [container-type:size]">
+      <div
+        ref={paperSlotRef}
+        className="grid min-h-0 flex-1 touch-none place-items-center [container-type:size]"
+      >
         <motion.div
           ref={paperRef}
           layoutId={shared ? dayLayoutId(date) : undefined}

@@ -44,6 +44,10 @@ _Avoid_: Tile, square
 The full-screen view of a single Day where the User draws.
 _Avoid_: Editor, canvas page, expanded view
 
+**Paper**:
+The sheet on the Drawing page that a Day's Strokes are drawn on; a Stroke can only start on the Paper.
+_Avoid_: Canvas, drawing area, surface
+
 ## Ink
 
 **Stroke**:
