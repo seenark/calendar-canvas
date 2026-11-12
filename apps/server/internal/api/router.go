@@ -45,6 +45,15 @@ func NewRouter(spa fs.FS, cfg config.Config, svc *auth.Service, conn *sql.DB) *g
 	calendar.POST("/days/:date/prune", strokes.prune)
 
 	q := store.New(conn)
+	shares := newShareHandlers(q, strokes)
+	calendar.GET("/shares/candidates", shares.candidates)
+	calendar.GET("/shares", shares.list)
+	calendar.POST("/shares", shares.create)
+	calendar.POST("/shares/:id/accept", shares.accept)
+	calendar.POST("/shares/:id/decline", shares.decline)
+	calendar.DELETE("/shares/:id", shares.remove)
+	calendar.GET("/users/:ownerId/months/:month", shares.month)
+
 	api.POST("/admin/login", adminLogin(svc))
 	admin := api.Group("/admin", requireRole(svc, auth.RoleAdmin))
 	admin.GET("/users", listUsers(q))

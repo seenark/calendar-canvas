@@ -2,6 +2,55 @@
 export type BBox = [minX: number, minY: number, maxX: number, maxY: number];
 
 //////////
+// source: shares_wire.go
+
+/**
+ * PublicUser is what one User may learn about another: never the email.
+ */
+export interface PublicUser {
+  id: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+export interface CandidatesResponse {
+  users: PublicUser[];
+}
+/**
+ * ShareViewer is a Viewer on the Owner's side of a Share; Status is the Invitation state.
+ */
+export interface ShareViewer {
+  id: string;
+  viewer: PublicUser;
+  status: "pending" | "accepted";
+}
+/**
+ * SharedCalendar is an accepted Share seen from the Viewer.
+ */
+export interface SharedCalendar {
+  id: string;
+  owner: PublicUser;
+}
+/**
+ * Invitation is a pending Share seen from the Viewer.
+ */
+export interface Invitation {
+  id: string;
+  owner: PublicUser;
+  createdAt: number /* int64 */;
+}
+export interface SharesResponse {
+  viewers: ShareViewer[];
+  calendars: SharedCalendar[];
+  invitations: Invitation[];
+}
+export interface CreateShareRequest {
+  viewerId: string;
+}
+export interface CreateShareResponse {
+  id: string;
+}
+
+//////////
 // source: strokes_wire.go
 
 export const OpAdd = "add";

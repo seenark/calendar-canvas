@@ -48,13 +48,18 @@ func currentUserID(c *gin.Context) string {
 }
 
 func (h *strokeHandlers) month(c *gin.Context) {
+	h.writeMonth(c, currentUserID(c))
+}
+
+// writeMonth answers with the Strokes of one User's month; the caller has already authorized the read.
+func (h *strokeHandlers) writeMonth(c *gin.Context, userID string) {
 	first, err := time.Parse("2006-01", c.Param("month"))
 	if err != nil {
 		abortError(c, http.StatusBadRequest, "invalid_month", "month must be YYYY-MM")
 		return
 	}
 	rows, err := h.q.ListStrokesBetweenDays(c.Request.Context(), store.ListStrokesBetweenDaysParams{
-		UserID:   currentUserID(c),
+		UserID:   userID,
 		FirstDay: first.Format(time.DateOnly),
 		LastDay:  first.AddDate(0, 1, -1).Format(time.DateOnly),
 	})
