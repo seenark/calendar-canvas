@@ -71,11 +71,16 @@ async function pruneDay(
 /**
  * Prunes the Day once per session, when it holds at least 300 Strokes or 100 Erasers, in an idle moment and
  * never while a pointer is down. The verification canvas follows the width of the Drawing page's paper.
+ * `enabled` is false on an Owner's calendar, whose Strokes are not the User's to prune.
  */
-export function usePruning(day: string, paperRef: RefObject<HTMLElement | null>): void {
+export function usePruning(
+  day: string,
+  paperRef: RefObject<HTMLElement | null>,
+  enabled = true,
+): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    if (started.has(day)) return;
+    if (!enabled || started.has(day)) return;
     const gate = () => pruneGate(dayStore.getSnapshot(day).strokes, started.has(day), down.size);
     const down = new Set<number>();
     let cancelIdle: (() => void) | undefined;
@@ -116,5 +121,5 @@ export function usePruning(day: string, paperRef: RefObject<HTMLElement | null>)
     window.addEventListener("pointercancel", onUp, true);
     check();
     return stop;
-  }, [day, paperRef, queryClient]);
+  }, [day, paperRef, queryClient, enabled]);
 }

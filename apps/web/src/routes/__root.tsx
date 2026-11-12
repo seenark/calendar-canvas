@@ -1,9 +1,10 @@
-import { Toaster } from "@calendar-canvas/ui/components/sonner";
 import type { QueryClient } from "@tanstack/react-query";
 import { HeadContent, Outlet, createRootRouteWithContext } from "@tanstack/react-router";
 
 import { ThemeProvider } from "@/components/theme-provider";
 import { UpdatePrompt } from "@/pwa/update-prompt";
+import { ThemeColorMeta, ThemedToaster } from "@/theme/theme-chrome";
+import { THEME_KEYS } from "@/theme/themes";
 
 import "../index.css";
 
@@ -32,14 +33,17 @@ function RootComponent() {
       <HeadContent />
       <ThemeProvider
         attribute="data-theme"
+        themes={THEME_KEYS}
         defaultTheme="system"
         enableSystem
+        enableColorScheme={false}
         disableTransitionOnChange
       >
         <div className="app-shell">
           <Outlet />
         </div>
-        <Toaster richColors />
+        <ThemedToaster />
+        <ThemeColorMeta />
         <UpdatePrompt />
       </ThemeProvider>
     </>

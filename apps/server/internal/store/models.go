@@ -13,6 +13,15 @@ type Session struct {
 	AdminFingerprint *string
 }
 
+type Share struct {
+	ID         string
+	OwnerID    string
+	ViewerID   string
+	Status     string
+	CreatedAt  int64
+	AcceptedAt *int64
+}
+
 type Stroke struct {
 	Seq        int64
 	ID         string

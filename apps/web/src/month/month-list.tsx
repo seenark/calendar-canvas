@@ -1,3 +1,4 @@
+import { onlineManager, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -12,7 +13,9 @@ import {
 
 import { monthIndex, yearMonthOfIndex } from "@/lib/date";
 import { useToday } from "@/lib/use-today";
-import { useMonths } from "@/sync/queries";
+import { useCalendar } from "@/share/calendar";
+import { monthLink } from "@/share/links";
+import { monthQueryFor, useMonths } from "@/sync/queries";
 
 import { rememberMonth } from "./last-month";
 import {
@@ -25,6 +28,8 @@ import {
   rangeContains,
 } from "./layout";
 import { MonthItem } from "./month-item";
+import { PullIndicator } from "./pull-indicator";
+import { usePullToLoad } from "./use-pull-to-load";
 
 const URL_DEBOUNCE_MS = 300;
 
@@ -38,9 +43,9 @@ function listAround(index: number): ListState {
 }
 
 /**
- * Month list that opens on `initialMonth` and grows one month at a time as the edge months
- * scroll into view. `routeMonth` is the `$yearMonth` in the URL, or undefined while another
- * route (a Day) is open over the list.
+ * Month list that opens on `initialMonth` with `RANGE_RADIUS` months on each side. A pull past
+ * either end adds `PULL_MONTHS` more once their Strokes are fetched. `routeMonth` is the
+ * `$yearMonth` in the URL, or undefined while another route (a Day) is open over the list.
  */
 export function MonthList({
   initialMonth,
@@ -52,6 +57,8 @@ export function MonthList({
   ref: Ref<MonthListHandle>;
 }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { ownerId } = useCalendar();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [list, setList] = useState(() => listAround(monthIndex(initialMonth)));
@@ -65,12 +72,10 @@ export function MonthList({
   const { range } = list;
   const count = range.last - range.first + 1;
   const yearMonthAt = (index: number) => yearMonthOfIndex(range.first + index);
-  const indexOf = (yearMonth: string) =>
-    Math.min(count - 1, Math.max(0, monthIndex(yearMonth) - range.first));
 
   const publish = (yearMonth: string) => {
     reportedMonth.current = yearMonth;
-    void navigate({ to: "/m/$yearMonth", params: { yearMonth }, replace: true });
+    void navigate({ ...monthLink(ownerId, yearMonth), replace: true });
   };
 
   // `width` is a dependency so a width change rebuilds the measurements that estimateSize feeds.
@@ -86,11 +91,51 @@ export function MonthList({
     anchorTo: "end",
   });
 
-  const firstVisible = virtualizer.range?.startIndex ?? indexOf(initialMonth);
-  const lastVisible = virtualizer.range?.endIndex ?? firstVisible;
-  useMonths(
-    Array.from({ length: lastVisible - firstVisible + 1 }, (_, i) => yearMonthAt(firstVisible + i)),
+  const rangeLoading = useMonths(
+    Array.from({ length: count }, (_, i) => yearMonthAt(i)),
+    ownerId,
   );
+
+  const pull = usePullToLoad(scrollRef, {
+    canLoad: (edge) => (edge === "top" ? growBefore(range) : growAfter(range)) !== range,
+    async load(edge) {
+      const grown = edge === "top" ? growBefore(range) : growAfter(range);
+      const [from, to] =
+        edge === "top" ? [grown.first, range.first - 1] : [range.last + 1, grown.last];
+      // Offline fails at once instead of pausing; `ensureQueryData` would otherwise join a paused prefetch.
+      if (!onlineManager.isOnline()) throw new Error("offline");
+      await Promise.all(
+        Array.from({ length: to - from + 1 }, (_, i) =>
+          queryClient.ensureQueryData({
+            ...monthQueryFor(ownerId, yearMonthOfIndex(from + i)),
+            networkMode: "always",
+            retry: false,
+          }),
+        ),
+      );
+      // A jump meanwhile replaced the list; these months no longer border it.
+      setList((current) => (current === list ? { range: grown, align: null } : current));
+    },
+  });
+
+  // virtual-core ends an iOS gesture on the scroller's own touchend. A touched Day cell that
+  // unmounts mid-gesture still gets the touchend but it never bubbles to the scroller, so relay it.
+  useEffect(() => {
+    const el = scrollRef.current!;
+    const onStart = (event: TouchEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const done = new AbortController();
+      const relay = (end: Event) => {
+        done.abort();
+        if (!el.contains(target)) el.dispatchEvent(new Event(end.type));
+      };
+      target.addEventListener("touchend", relay, { signal: done.signal });
+      target.addEventListener("touchcancel", relay, { signal: done.signal });
+    };
+    el.addEventListener("touchstart", onStart, { capture: true, passive: true });
+    return () => el.removeEventListener("touchstart", onStart, { capture: true });
+  }, []);
 
   useLayoutEffect(() => {
     const el = scrollRef.current!;
@@ -108,27 +153,6 @@ export function MonthList({
     const align = fresh ? list.align : monthIndex(visibleMonth.current);
     if (align !== null) virtualizer.scrollToIndex(align - range.first, { align: "start" });
   }, [list, width]);
-
-  useLayoutEffect(() => {
-    if (width === 0) return;
-    const el = scrollRef.current!;
-    const scrollTop = virtualizer.scrollOffset ?? 0;
-    // A scroll command or a held anchor correction is written to the element before the
-    // virtualizer reads it back, and growing meanwhile prepends against a position it is about
-    // to replace. The read-back re-renders, so decide then.
-    if (Math.abs(el.scrollTop - scrollTop) > 1) return;
-    // Month heights are fractional and WebKit floors scrollTop, so a sliver under 1px is not on screen.
-    const before = growBefore(range);
-    if (scrollTop + 1 < monthItemHeight(width, yearMonthAt(0)) && before !== range) {
-      setList({ range: before, align: null });
-      return;
-    }
-    const lastTop = virtualizer.getTotalSize() - monthItemHeight(width, yearMonthAt(count - 1));
-    const after = growAfter(range);
-    if (scrollTop + el.clientHeight > lastTop + 1 && after !== range) {
-      setList({ range: after, align: null });
-    }
-  });
 
   useEffect(() => {
     if (routeMonth === undefined) {
@@ -150,9 +174,19 @@ export function MonthList({
     if (rangeContains(range, target)) {
       virtualizer.scrollToIndex(target - range.first, { align: "start" });
     } else {
+      pull.reset();
       setList(listAround(target));
     }
   }, [routeMonth]);
+
+  // Another calendar's Strokes are fetched per Owner, so it gets its own range around the month being read.
+  const shownOwner = useRef(ownerId);
+  useEffect(() => {
+    if (shownOwner.current === ownerId) return;
+    shownOwner.current = ownerId;
+    pull.reset();
+    setList(listAround(monthIndex(visibleMonth.current)));
+  }, [ownerId]);
 
   useEffect(() => () => window.clearTimeout(urlTimer.current), []);
 
@@ -160,6 +194,7 @@ export function MonthList({
     jumpTo(yearMonth) {
       visibleMonth.current = yearMonth;
       window.clearTimeout(urlTimer.current);
+      pull.reset();
       setList(listAround(monthIndex(yearMonth)));
       if (routeMonth !== undefined && yearMonth !== reportedMonth.current) publish(yearMonth);
     },
@@ -180,24 +215,27 @@ export function MonthList({
   };
 
   return (
-    <div
-      ref={scrollRef}
-      data-month-scroll
-      onScroll={onScroll}
-      className="min-h-0 flex-1 overflow-y-auto"
-    >
-      <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
-        {width > 0 &&
-          virtualizer.getVirtualItems().map((item) => (
-            <div
-              key={item.key}
-              className="absolute top-0 left-0 w-full"
-              style={{ height: item.size, transform: `translateY(${item.start}px)` }}
-            >
-              <MonthItem yearMonth={yearMonthAt(item.index)} today={today} />
-            </div>
-          ))}
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={scrollRef}
+        data-month-scroll
+        onScroll={onScroll}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-y-none"
+      >
+        <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
+          {width > 0 &&
+            virtualizer.getVirtualItems().map((item) => (
+              <div
+                key={item.key}
+                className="absolute top-0 left-0 w-full"
+                style={{ height: item.size, transform: `translateY(${item.start}px)` }}
+              >
+                <MonthItem yearMonth={yearMonthAt(item.index)} today={today} />
+              </div>
+            ))}
+        </div>
       </div>
+      <PullIndicator state={pull.state} rangeLoading={rangeLoading} />
     </div>
   );
 }

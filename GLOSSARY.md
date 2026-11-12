@@ -33,7 +33,7 @@ One calendar date (`YYYY-MM-DD`) in one User's calendar, chosen by the cell the 
 _Avoid_: Date page, entry
 
 **Month view**:
-The User's home screen: a vertical list of consecutive months, each showing its Day cells.
+A vertical list of consecutive months of one calendar, each showing its Day cells; the User's own calendar is their home screen, and a calendar Shared with them opens the same way.
 _Avoid_: Calendar view, month list, month page
 
 **Day cell**:
@@ -47,6 +47,24 @@ _Avoid_: Editor, canvas page, expanded view
 **Paper**:
 The sheet on the Drawing page that a Day's Strokes are drawn on; a Stroke can only start on the Paper.
 _Avoid_: Canvas, drawing area, surface
+
+## Sharing
+
+**Owner**:
+The User whose calendar it is.
+_Avoid_: Sharer, host
+
+**Viewer**:
+A User who sees another User's calendar through an accepted Share; a Viewer never draws in it.
+_Avoid_: Guest, follower, subscriber
+
+**Share**:
+An Owner's permission for one Viewer to see the Owner's whole calendar, read-only and in one direction only.
+_Avoid_: Access, permission, subscription
+
+**Invitation**:
+A Share the Viewer has not yet accepted or declined; until they accept, the Viewer sees nothing of the calendar.
+_Avoid_: Request, invite, invite link
 
 ## Ink
 

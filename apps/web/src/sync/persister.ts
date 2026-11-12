@@ -17,8 +17,11 @@ export const CACHE_KEY = "REACT_QUERY_OFFLINE_CACHE";
 const COALESCE_MS = 1000;
 const buster = __APP_VERSION__;
 const dehydrateOptions: DehydrateOptions = {
-  shouldDehydrateQuery: (query) =>
-    (query.queryKey[0] === "month" || query.queryKey[0] === "me") && query.state.data !== undefined,
+  shouldDehydrateQuery: ({ queryKey, state }) =>
+    (["month", "sharedMonth", "me"].includes(queryKey[0] as string) ||
+      // the Share lists, not ['shares', 'candidates']
+      (queryKey[0] === "shares" && queryKey.length === 1)) &&
+    state.data !== undefined,
 };
 
 export type QueryCachePersister = Persister & {
@@ -98,7 +101,7 @@ export function createQueryCachePersister(queryClient: QueryClient): QueryCacheP
   };
 }
 
-/** Paused mutations (the default), month queries and the signed-in identity, so the app opens offline. A failed refetch keeps data, so test for data, not status. */
+/** Paused mutations (the default), month queries (own and Shared), the Share lists and the signed-in identity, so the app opens offline. A failed refetch keeps data, so test for data, not status. */
 export const queryCachePersistOptions = (
   persister: QueryCachePersister,
 ): PersistQueryClientProviderProps["persistOptions"] => ({

@@ -5,6 +5,8 @@ import { DrawingPage } from "@/drawing/drawing-page";
 import { ApiError, fetchMeOrStay } from "@/lib/api";
 import { isDayKey, isYearMonth, monthOfDay, toDayKey } from "@/lib/date";
 import { MonthView } from "@/month/month-view";
+import { CalendarProvider } from "@/share/calendar";
+import { useLeaveWhenGone } from "@/share/leave-when-gone";
 
 const TRANSITION = {
   default: { duration: 0.2 },
@@ -26,7 +28,8 @@ export const Route = createFileRoute("/_calendar")({
 });
 
 function CalendarLayout() {
-  const { date, yearMonth } = useParams({ strict: false });
+  const { date, yearMonth, ownerId = null } = useParams({ strict: false });
+  useLeaveWhenGone(ownerId);
   const reducedMotion = useReducedMotion();
   const routeMonth = yearMonth && isYearMonth(yearMonth) ? yearMonth : undefined;
   const openDay = date && isDayKey(date) ? date : undefined;
@@ -35,10 +38,12 @@ function CalendarLayout() {
 
   return (
     <MotionConfig transition={reducedMotion ? INSTANT : TRANSITION}>
-      <MonthView initialMonth={month} routeMonth={routeMonth} />
-      <AnimatePresence initial={false}>
-        {openDay && <DrawingPage key={openDay} date={openDay} />}
-      </AnimatePresence>
+      <CalendarProvider ownerId={ownerId}>
+        <MonthView initialMonth={month} routeMonth={routeMonth} />
+        <AnimatePresence initial={false}>
+          {openDay && <DrawingPage key={openDay} date={openDay} />}
+        </AnimatePresence>
+      </CalendarProvider>
       <Outlet />
     </MotionConfig>
   );

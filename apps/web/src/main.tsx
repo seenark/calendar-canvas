@@ -50,7 +50,7 @@ const router = createRouter({
   routeTree,
   defaultPreload: "intent",
   // The Month view keeps its own scroll position. The router's restoration would overwrite it after each navigation.
-  scrollRestoration: ({ location }) => !/^\/[md]\//.test(location.pathname),
+  scrollRestoration: ({ location }) => !/^\/(?:u\/[^/]+\/)?[md]\//.test(location.pathname),
   defaultPendingComponent: () => <Loader />,
   context: { queryClient },
 });

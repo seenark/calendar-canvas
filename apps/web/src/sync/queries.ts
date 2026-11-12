@@ -50,32 +50,49 @@ export function decodeMonth({ strokes }: MonthResponse): MonthStrokes {
   return days;
 }
 
-export const monthQuery = (yearMonth: string) =>
+/** An Owner's month as a Viewer sees it. Never fed to the `DayStore`: it holds the User's own Strokes only. */
+export const sharedMonthKey = (ownerId: string, yearMonth: string) =>
+  ["sharedMonth", ownerId, yearMonth] as const;
+
+const monthFetch = (path: string) => async () => {
+  try {
+    return decodeMonth(await api<MonthResponse>(path));
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401)
+      getDefaultStore().set(needsAuthAtom, true);
+    throw error;
+  }
+};
+
+/** A month of the User's own calendar (`ownerId` null) or of an Owner's. */
+export const monthQueryFor = (ownerId: string | null, yearMonth: string) =>
   queryOptions({
-    queryKey: monthKey(yearMonth),
-    queryFn: async () => {
-      try {
-        return decodeMonth(await api<MonthResponse>(`/api/months/${yearMonth}`));
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401)
-          getDefaultStore().set(needsAuthAtom, true);
-        throw error;
-      }
-    },
+    queryKey: ownerId === null ? monthKey(yearMonth) : sharedMonthKey(ownerId, yearMonth),
+    queryFn: monthFetch(
+      ownerId === null ? `/api/months/${yearMonth}` : `/api/users/${ownerId}/months/${yearMonth}`,
+    ),
     retry: (failureCount, error) => failureCount < 3 && shouldRetry(failureCount, error),
   });
 
-/** Observes `months` and prefetches the month on each side of them. */
-export function useMonths(months: readonly string[]): void {
+export const monthQuery = (yearMonth: string) => monthQueryFor(null, yearMonth);
+
+/**
+ * Observes `months` of the User's own calendar, or of `ownerId`'s, and prefetches the month on each side of them.
+ * Returns whether any of `months` is fetching with no data to show yet.
+ */
+export function useMonths(months: readonly string[], ownerId: string | null = null): boolean {
   const queryClient = useQueryClient();
-  useQueries({ queries: months.map(monthQuery) });
+  const results = useQueries({
+    queries: months.map((yearMonth) => monthQueryFor(ownerId, yearMonth)),
+  });
   const first = months[0];
   const last = months[months.length - 1];
   useEffect(() => {
     if (first === undefined || last === undefined) return;
     for (const index of [monthIndex(first) - 1, monthIndex(last) + 1])
-      void queryClient.prefetchQuery(monthQuery(yearMonthOfIndex(index)));
-  }, [queryClient, first, last]);
+      void queryClient.prefetchQuery(monthQueryFor(ownerId, yearMonthOfIndex(index)));
+  }, [queryClient, first, last, ownerId]);
+  return results.some((result) => result.isLoading);
 }
 
 /**

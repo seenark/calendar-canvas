@@ -9,4 +9,5 @@ packages:
       - errors.go
       - middleware.go
       - router.go
+      - shares.go
       - strokes.go
