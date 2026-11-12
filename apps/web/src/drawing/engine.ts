@@ -25,6 +25,8 @@ export type DrawingEngineOptions = {
   store: Store;
   day: string;
   onCommit: (stroke: Stroke) => void;
+  /** Pinch zoom only: no Stroke starts, so `onCommit` never runs. */
+  readOnly?: boolean;
 };
 
 type Active = {
@@ -51,6 +53,7 @@ export class DrawingEngine {
   private readonly store: Store;
   private readonly day: string;
   private readonly onCommit: (stroke: Stroke) => void;
+  private readonly readOnly: boolean;
   private readonly staticCanvas = document.createElement("canvas");
   private readonly liveCanvas = document.createElement("canvas");
   /** The static canvas as it was before the active Eraser began. Every Eraser frame is this plus one full outline. */
@@ -75,11 +78,12 @@ export class DrawingEngine {
   private pinch: Pinch | null = null;
   private settleZoom = false;
 
-  constructor({ container, store, day, onCommit }: DrawingEngineOptions) {
+  constructor({ container, store, day, onCommit, readOnly = false }: DrawingEngineOptions) {
     this.container = container;
     this.store = store;
     this.day = day;
     this.onCommit = onCommit;
+    this.readOnly = readOnly;
     this.layer.style.cssText =
       "position:absolute;inset:0;transform-origin:0 0;will-change:transform";
     for (const canvas of [this.staticCanvas, this.liveCanvas]) {
@@ -165,7 +169,7 @@ export class DrawingEngine {
       if (e.isPrimary) this.resetTouches();
       if (this.trackTouch(e)) return;
     }
-    if (this.pinch || this.active || e.button > 0) return;
+    if (this.readOnly || this.pinch || this.active || e.button > 0) return;
     const kind = this.store.get(toolAtom);
     const { color, size } =
       kind === "pen"

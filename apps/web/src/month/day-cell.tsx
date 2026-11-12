@@ -6,6 +6,8 @@ import { cn } from "@calendar-canvas/ui/lib/utils";
 import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, parseDay } from "@/lib/date";
 import { rectsIntersect } from "@/month/layout";
+import { useCalendar } from "@/share/calendar";
+import { dayLink } from "@/share/links";
 import { Thumbnail } from "@/thumbnails/thumbnail";
 
 export const dayLayoutId = (day: string) => `day-${day}`;
@@ -22,10 +24,10 @@ export function isDayCellOnScreen(day: string): boolean {
 }
 
 export function DayCell({ day, isToday }: { day: string; isToday: boolean }) {
+  const { ownerId } = useCalendar();
   return (
     <Link
-      to="/d/$date"
-      params={{ date: day }}
+      {...dayLink(ownerId, day)}
       aria-label={formatThaiDate(parseDay(day)!)}
       aria-current={isToday ? "date" : undefined}
       className="relative block text-left text-xs"

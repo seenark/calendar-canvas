@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { dayStore, type DaySnapshot } from "@/sync/day-store";
+import { useCalendar } from "@/share/calendar";
+import type { DaySnapshot } from "@/sync/day-store";
 
 import { thumbnails } from "./client";
 
@@ -24,11 +25,14 @@ function subscribeDpr(notify: () => void): () => void {
 
 /** A Day with no Strokes has nothing to show, so it renders no canvas. Subscribes to its own Day only. */
 export function Thumbnail({ day }: { day: string }) {
-  const { revision, strokes } = useSyncExternalStore(dayStore.subscribe, () =>
-    dayStore.getSnapshot(day),
+  const { ownerId, source } = useCalendar();
+  const { revision, strokes } = useSyncExternalStore(source.subscribe, () =>
+    source.getSnapshot(day),
   );
   if (strokes.length === 0) return null;
-  return <ThumbnailCanvas day={day} revision={revision} strokes={strokes} />;
+  // The bitmap cache and queue key by Day, and two calendars can hold the same Day.
+  const cacheDay = ownerId === null ? day : `${ownerId}/${day}`;
+  return <ThumbnailCanvas day={cacheDay} revision={revision} strokes={strokes} />;
 }
 
 /**

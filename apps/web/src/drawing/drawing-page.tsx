@@ -1,7 +1,7 @@
 import { Button } from "@calendar-canvas/ui/components/button";
 import { useRouter } from "@tanstack/react-router";
 import { getDefaultStore } from "jotai/vanilla";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Eye } from "lucide-react";
 import { motion, useIsPresent, useReducedMotion } from "motion/react";
 import {
   useEffect,
@@ -19,6 +19,8 @@ import { DAY_ASPECT } from "@/ink/constants";
 import { formatThaiDate, monthOfDay, parseDay } from "@/lib/date";
 import { dayLayoutId, isDayCellOnScreen } from "@/month/day-cell";
 import { usePruning } from "@/pruning/trigger";
+import { useCalendar } from "@/share/calendar";
+import { monthLink } from "@/share/links";
 import { toolAtom } from "@/state/tool";
 import { dayStore } from "@/sync/day-store";
 import { useMonths } from "@/sync/queries";
@@ -27,7 +29,7 @@ import { CellThumbnailCopy, Thumbnail } from "@/thumbnails/thumbnail";
 /** Longest the engine waits for the expand animation before it mounts anyway. */
 const EXPAND_TIMEOUT_MS = 1000;
 
-/** Leftward travel that turns a press on the blank space around the Paper into going back. */
+/** Rightward travel that turns a press on the blank space around the Paper into going back. */
 const SWIPE_BACK_PX = 60;
 
 const FADE = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 } };
@@ -36,10 +38,14 @@ const FADE = { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity
  * The Day's paper shares a layout with its Day cell. While it expands the paper shows the Day cell's
  * bitmap stretched to the paper, then the sharper paper-size thumbnail once the worker delivers it, and
  * the DrawingEngine mounts once the expand animation ends. Without a Day cell the paper fades like the rest.
+ * On an Owner's calendar the page is read-only: the engine takes pinch zoom only, there is no Toolbar, and
+ * Strokes come from the Owner's cached month, never the `dayStore`.
  */
 export function DrawingPage({ date }: { date: string }) {
   const router = useRouter();
-  useMonths([monthOfDay(date)]);
+  const { ownerId, source } = useCalendar();
+  const readOnly = ownerId !== null;
+  useMonths([monthOfDay(date)], ownerId);
   const reducedMotion = useReducedMotion();
   const isPresent = useIsPresent();
   const paperRef = useRef<HTMLDivElement>(null);
@@ -48,17 +54,17 @@ export function DrawingPage({ date }: { date: string }) {
   const pointersDown = useRef(new Set<number>());
   const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
   const [paperWidth, setPaperWidth] = useState(0);
-  usePruning(date, surfaceRef);
+  usePruning(date, surfaceRef, !readOnly);
   const [shared] = useState(() => !reducedMotion && isDayCellOnScreen(date));
   const [ready, setReady] = useState(!shared);
   const [drawn, setDrawn] = useState(false);
   const canUndo = useSyncExternalStore(
     dayStore.subscribe,
-    () => dayStore.getSnapshot(date).canUndo,
+    () => !readOnly && dayStore.getSnapshot(date).canUndo,
   );
   const canRedo = useSyncExternalStore(
     dayStore.subscribe,
-    () => dayStore.getSnapshot(date).canRedo,
+    () => !readOnly && dayStore.getSnapshot(date).canRedo,
   );
 
   useEffect(() => {
@@ -70,30 +76,31 @@ export function DrawingPage({ date }: { date: string }) {
   useLayoutEffect(() => {
     if (!ready) return;
     const store = getDefaultStore();
-    store.set(toolAtom, "pen");
+    if (!readOnly) store.set(toolAtom, "pen");
     const engine = new DrawingEngine({
       container: surfaceRef.current!,
       store,
       day: date,
+      readOnly,
       onCommit: (stroke) => dayStore.commitStroke(stroke),
     });
     let revision = -1;
     const sync = () => {
-      const snapshot = dayStore.getSnapshot(date);
+      const snapshot = source.getSnapshot(date);
       if (snapshot.revision === revision) return;
       revision = snapshot.revision;
       engine.setStrokes(snapshot.strokes);
     };
-    const unsubscribe = dayStore.subscribe(sync);
+    const unsubscribe = source.subscribe(sync);
     sync();
     const frame = requestAnimationFrame(() => setDrawn(true));
     return () => {
       cancelAnimationFrame(frame);
       engine.destroy();
       unsubscribe();
-      dayStore.clearHistory(date);
+      if (!readOnly) dayStore.clearHistory(date);
     };
-  }, [date, ready]);
+  }, [date, ready, readOnly, source]);
 
   useEffect(() => {
     const paper = paperRef.current!;
@@ -104,12 +111,7 @@ export function DrawingPage({ date }: { date: string }) {
 
   const goBack = () => {
     if (router.history.canGoBack()) router.history.back();
-    else
-      router.navigate({
-        to: "/m/$yearMonth",
-        params: { yearMonth: monthOfDay(date) },
-        replace: true,
-      });
+    else router.navigate({ ...monthLink(ownerId, monthOfDay(date)), replace: true });
   };
 
   /** A swipe starts only from the sole pointer down, pressed on the blank space around the Paper. */
@@ -126,13 +128,13 @@ export function DrawingPage({ date }: { date: string }) {
     const start = swipe.current;
     if (start?.id !== e.pointerId) return;
     swipe.current = null;
-    const left = start.x - e.clientX;
+    const right = e.clientX - start.x;
     // a page already leaving must not go back a second time
     if (
       e.type === "pointerup" &&
       isPresent &&
-      left >= SWIPE_BACK_PX &&
-      left > Math.abs(e.clientY - start.y)
+      right >= SWIPE_BACK_PX &&
+      right > Math.abs(e.clientY - start.y)
     )
       goBack();
   };
@@ -156,7 +158,14 @@ export function DrawingPage({ date }: { date: string }) {
           <ArrowLeft className="size-5" />
         </Button>
         <h1 className="text-sm font-bold">{formatThaiDate(parseDay(date)!)}</h1>
-        <SaveStatus />
+        {readOnly ? (
+          <p className="text-muted-foreground ml-auto flex items-center gap-1 pr-2 text-xs font-bold">
+            <Eye className="size-3.5" aria-hidden="true" />
+            ดูอย่างเดียว
+          </p>
+        ) : (
+          <SaveStatus />
+        )}
       </motion.header>
       <div
         ref={paperSlotRef}
@@ -182,15 +191,17 @@ export function DrawingPage({ date }: { date: string }) {
           />
         </motion.div>
       </div>
-      <motion.div {...FADE}>
-        <Toolbar
-          paperWidth={paperWidth}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onUndo={() => dayStore.undo(date)}
-          onRedo={() => dayStore.redo(date)}
-        />
-      </motion.div>
+      {!readOnly && (
+        <motion.div {...FADE}>
+          <Toolbar
+            paperWidth={paperWidth}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            onUndo={() => dayStore.undo(date)}
+            onRedo={() => dayStore.redo(date)}
+          />
+        </motion.div>
+      )}
     </div>
   );
 }

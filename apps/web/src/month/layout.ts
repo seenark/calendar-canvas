@@ -5,11 +5,17 @@ import { monthGrid } from "@/month/grid";
 /** The consecutive months the Month view lists, both ends inclusive. */
 export type MonthRange = { first: number; last: number };
 
-/** The month at `center` and its neighbours on each side, clamped to the supported years. */
+/** Months listed on each side of the month the Month view opens or jumps to. */
+export const RANGE_RADIUS = 3;
+
+/** Months one pull at either edge adds. */
+export const PULL_MONTHS = 3;
+
+/** The month at `center` and `RANGE_RADIUS` months on each side, clamped to the supported years. */
 export function rangeAround(center: number): MonthRange {
   return {
-    first: Math.max(center - 1, MIN_MONTH_INDEX),
-    last: Math.min(center + 1, MAX_MONTH_INDEX),
+    first: Math.max(center - RANGE_RADIUS, MIN_MONTH_INDEX),
+    last: Math.min(center + RANGE_RADIUS, MAX_MONTH_INDEX),
   };
 }
 
@@ -17,14 +23,18 @@ export function rangeContains(range: MonthRange, index: number): boolean {
   return index >= range.first && index <= range.last;
 }
 
-/** The range with the month before it added, or the same object at the first supported month. */
+/** The range with `PULL_MONTHS` before it added, or the same object at the first supported month. */
 export function growBefore(range: MonthRange): MonthRange {
-  return range.first <= MIN_MONTH_INDEX ? range : { first: range.first - 1, last: range.last };
+  return range.first <= MIN_MONTH_INDEX
+    ? range
+    : { first: Math.max(range.first - PULL_MONTHS, MIN_MONTH_INDEX), last: range.last };
 }
 
-/** The range with the month after it added, or the same object at the last supported month. */
+/** The range with `PULL_MONTHS` after it added, or the same object at the last supported month. */
 export function growAfter(range: MonthRange): MonthRange {
-  return range.last >= MAX_MONTH_INDEX ? range : { first: range.first, last: range.last + 1 };
+  return range.last >= MAX_MONTH_INDEX
+    ? range
+    : { first: range.first, last: Math.min(range.last + PULL_MONTHS, MAX_MONTH_INDEX) };
 }
 
 type Rect = { top: number; bottom: number; left: number; right: number };
