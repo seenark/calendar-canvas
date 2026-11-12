@@ -4,10 +4,18 @@
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
-@custom-variant dark (&:is([data-theme="dark"], [data-theme="dark"] *));
+/* Every dark theme key. Keep in sync with apps/web/src/theme/themes.ts. */
+@custom-variant dark (
+  &:is(
+    :is([data-theme="dark"], [data-theme="rose-pine"], [data-theme="nord"], [data-theme="tokyo-night"], [data-theme="dracula"]),
+    :is([data-theme="dark"], [data-theme="rose-pine"], [data-theme="nord"], [data-theme="tokyo-night"], [data-theme="dracula"]) *
+  )
+);
 
 /* Catppuccin Latte. Source: https://github.com/catppuccin/palette */
-:root {
+:root,
+[data-theme="light"] {
+  color-scheme: light;
   --background: #eff1f5;
   --foreground: #4c4f69;
   --card: #e6e9ef;
@@ -41,6 +49,7 @@
   --sidebar-border: #bcc0cc;
   --sidebar-ring: #8839ef;
 
+  /* Stays white in every theme: Stroke colours are fixed hex and the canvas is transparent over this. */
   --paper: #ffffff;
   --paper-foreground: #4c4f69;
   --cream: #eddfc2;
@@ -52,6 +61,7 @@
 
 /* Catppuccin Mocha */
 [data-theme="dark"] {
+  color-scheme: dark;
   --background: #1e1e2e;
   --foreground: #cdd6f4;
   --card: #313244;
@@ -87,6 +97,248 @@
   --ema: #f5c2e7;
   --shadow-ink: #11111b;
   --grain-opacity: 0.06;
+}
+
+/* Rosé Pine Dawn. Source: https://rosepinetheme.com/palette/ */
+[data-theme="rose-pine-dawn"] {
+  color-scheme: light;
+  --background: #faf4ed;
+  --foreground: #464261;
+  --card: #fffaf3;
+  --secondary: #f2e9e1;
+  --muted-foreground: #797593;
+  --primary: #286983;
+  --primary-foreground: #faf4ed;
+  --destructive: #b4637a;
+  --border: #dfdad9;
+  --chart-1: #286983;
+  --chart-2: #56949f;
+  --chart-3: #907aa9;
+  --chart-4: #d7827e;
+  --chart-5: #ea9d34;
+
+  --paper-foreground: #464261;
+  --cream: #f2e9e1;
+  --cream-foreground: #464261;
+  --ema: #d7827e;
+  --shadow-ink: #464261;
+  --grain-opacity: 0.1;
+}
+
+/* Gruvbox Light, medium contrast, faded accents. Source: https://github.com/morhetz/gruvbox (colors/gruvbox.vim) */
+[data-theme="gruvbox-light"] {
+  color-scheme: light;
+  --background: #fbf1c7;
+  --foreground: #3c3836;
+  --card: #f2e5bc;
+  --secondary: #ebdbb2;
+  --muted-foreground: #7c6f64;
+  --primary: #076678;
+  --primary-foreground: #fbf1c7;
+  --destructive: #9d0006;
+  --border: #d5c4a1;
+  --chart-1: #076678;
+  --chart-2: #427b58;
+  --chart-3: #8f3f71;
+  --chart-4: #af3a03;
+  --chart-5: #b57614;
+
+  --paper-foreground: #3c3836;
+  --cream: #ebdbb2;
+  --cream-foreground: #3c3836;
+  --ema: #b16286;
+  --shadow-ink: #3c3836;
+  --grain-opacity: 0.1;
+}
+
+/* Solarized Light. Source: https://ethanschoonover.com/solarized/ */
+[data-theme="solarized-light"] {
+  color-scheme: light;
+  --background: #fdf6e3;
+  --foreground: #586e75;
+  --card: #eee8d5;
+  --secondary: #eee8d5;
+  --muted-foreground: #657b83;
+  --primary: #268bd2;
+  --primary-foreground: #fdf6e3;
+  --destructive: #dc322f;
+  --border: #93a1a1;
+  --chart-1: #268bd2;
+  --chart-2: #2aa198;
+  --chart-3: #6c71c4;
+  --chart-4: #d33682;
+  --chart-5: #cb4b16;
+
+  --paper-foreground: #586e75;
+  --cream: #eee8d5;
+  --cream-foreground: #586e75;
+  --ema: #d33682;
+  --shadow-ink: #073642;
+  --grain-opacity: 0.1;
+}
+
+/* Everforest Light, medium contrast. Source: https://github.com/sainnhe/everforest/blob/master/palette.md */
+[data-theme="everforest-light"] {
+  color-scheme: light;
+  --background: #fdf6e3;
+  --foreground: #5c6a72;
+  --card: #f4f0d9;
+  --secondary: #efebd4;
+  --muted-foreground: #708089;
+  --primary: #8da101;
+  /* The palette's own dark bg0: the light fg on this green is only 2.6:1. */
+  --primary-foreground: #2d353b;
+  --destructive: #f85552;
+  --border: #bdc3af;
+  --chart-1: #3a94c5;
+  --chart-2: #35a77c;
+  --chart-3: #8da101;
+  --chart-4: #df69ba;
+  --chart-5: #dfa000;
+
+  --paper-foreground: #5c6a72;
+  --cream: #e6e2cc;
+  --cream-foreground: #5c6a72;
+  --ema: #df69ba;
+  --shadow-ink: #5c6a72;
+  --grain-opacity: 0.1;
+}
+
+/* Rosé Pine. Source: https://rosepinetheme.com/palette/ */
+[data-theme="rose-pine"] {
+  color-scheme: dark;
+  --background: #191724;
+  --foreground: #e0def4;
+  --card: #1f1d2e;
+  --secondary: #26233a;
+  --muted-foreground: #908caa;
+  --primary: #c4a7e7;
+  --primary-foreground: #191724;
+  --destructive: #eb6f92;
+  --border: #403d52;
+  --chart-1: #c4a7e7;
+  --chart-2: #9ccfd8;
+  --chart-3: #ebbcba;
+  --chart-4: #f6c177;
+  --chart-5: #31748f;
+
+  --paper-foreground: #191724;
+  --cream: #ebbcba;
+  --cream-foreground: #191724;
+  --ema: #eb6f92;
+  /* Neutral black: the palette has nothing darker than base. */
+  --shadow-ink: #000000;
+  --grain-opacity: 0.06;
+}
+
+/* Nord. Source: https://www.nordtheme.com/docs/colors-and-palettes */
+[data-theme="nord"] {
+  color-scheme: dark;
+  --background: #2e3440;
+  --foreground: #eceff4;
+  --card: #3b4252;
+  --secondary: #434c5e;
+  --muted-foreground: #d8dee9;
+  --primary: #88c0d0;
+  --primary-foreground: #2e3440;
+  --destructive: #bf616a;
+  --border: #4c566a;
+  --chart-1: #8fbcbb;
+  --chart-2: #88c0d0;
+  --chart-3: #81a1c1;
+  --chart-4: #b48ead;
+  --chart-5: #d08770;
+
+  --paper-foreground: #2e3440;
+  --cream: #ebcb8b;
+  --cream-foreground: #2e3440;
+  --ema: #b48ead;
+  /* Neutral black: the palette has nothing darker than nord0. */
+  --shadow-ink: #000000;
+  --grain-opacity: 0.06;
+}
+
+/* Tokyo Night. Source: https://github.com/folke/tokyonight.nvim/blob/main/extras/lua/tokyonight_night.lua */
+[data-theme="tokyo-night"] {
+  color-scheme: dark;
+  --background: #1a1b26;
+  --foreground: #c0caf5;
+  --card: #292e42;
+  --secondary: #3b4261;
+  --muted-foreground: #a9b1d6;
+  --primary: #7aa2f7;
+  --primary-foreground: #1a1b26;
+  --destructive: #f7768e;
+  --border: #3b4261;
+  --chart-1: #7aa2f7;
+  --chart-2: #7dcfff;
+  --chart-3: #bb9af7;
+  --chart-4: #9ece6a;
+  --chart-5: #ff9e64;
+
+  --paper-foreground: #1a1b26;
+  --cream: #e0af68;
+  --cream-foreground: #1a1b26;
+  --ema: #f7768e;
+  --shadow-ink: #0c0e14;
+  --grain-opacity: 0.06;
+}
+
+/* Dracula. Source: https://draculatheme.com/spec (Dracula Classic palette and UI palette) */
+[data-theme="dracula"] {
+  color-scheme: dark;
+  --background: #282a36;
+  --foreground: #f8f8f2;
+  --card: #343746;
+  --secondary: #44475a;
+  /* The palette's Comment (#6272a4) is only 3.2:1 on the background, so dim the foreground instead. */
+  --muted-foreground: color-mix(in srgb, #f8f8f2 70%, #282a36);
+  --primary: #bd93f9;
+  --primary-foreground: #282a36;
+  --destructive: #ff5555;
+  --border: #44475a;
+  --chart-1: #bd93f9;
+  --chart-2: #ff79c6;
+  --chart-3: #8be9fd;
+  --chart-4: #50fa7b;
+  --chart-5: #ffb86c;
+
+  --paper-foreground: #282a36;
+  --cream: #ffb86c;
+  --cream-foreground: #282a36;
+  --ema: #ff79c6;
+  --shadow-ink: #191a21;
+  --grain-opacity: 0.06;
+}
+
+/* Tokens the eight added themes derive from their core ones. Latte and Mocha spell theirs out above. */
+:is(
+  [data-theme="rose-pine-dawn"],
+  [data-theme="gruvbox-light"],
+  [data-theme="solarized-light"],
+  [data-theme="everforest-light"],
+  [data-theme="rose-pine"],
+  [data-theme="nord"],
+  [data-theme="tokyo-night"],
+  [data-theme="dracula"]
+) {
+  --card-foreground: var(--foreground);
+  --popover: var(--card);
+  --popover-foreground: var(--foreground);
+  --secondary-foreground: var(--foreground);
+  --muted: var(--card);
+  --accent: var(--secondary);
+  --accent-foreground: var(--foreground);
+  --input: var(--border);
+  --ring: var(--primary);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--secondary);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--primary);
 }
 
 @theme inline {
