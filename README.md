@@ -184,6 +184,8 @@ Files under `/assets/` have hashed names and are served as immutable, so Cloudfl
 
 Any Google account with a verified email can sign in. A first sign-in creates a **Pending** User, who sees a waiting screen instead of the calendar. Only the Admin can approve a Pending User, so set up Admin sign-in before you invite anyone. The Admin page lists Users in three sections, Pending, Approved and Blocked, with อนุมัติ (approve), ระงับ (block) and ลบ (delete) where they apply. Approved Users use the calendar, and a waiting User who reopens or refocuses the app moves into the Month view without signing in again. Blocking a User ends all their sessions at once and keeps their drawings. A Blocked person who signs in sees that the account is suspended and stays Blocked until the Admin approves them again, and that device discards its unsynced drawing. Deleting a User also deletes their drawings, and signing in again makes them Pending.
 
+Approved Users can share their calendar read-only with other Approved Users from the calendar menu in the Month view header. The other User sees an in-app invitation and must accept it; no email is sent, and the list of Users to share with shows names and avatars, never email addresses. While either side is Blocked, the share is hidden, and it comes back when the Admin approves them again. Deleting a User also deletes every share they are part of.
+
 Users that exist when you upgrade from a version with `ALLOWED_EMAILS` become Approved automatically. A leftover `ALLOWED_EMAILS` value in the environment is ignored.
 
 1. Pick a password and generate its hash. The password is read from stdin, one line:
